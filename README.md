@@ -42,7 +42,7 @@ The test page has one card for each kind of image Largitude should show, or leav
 
 On every push, a GitHub Action, **Tests**, runs the add-on checker and the unit tests.
 
-Publishing a GitHub release runs a second one, **Firefox Add-ons**, which submits that version of the extension to Firefox Add-ons with the notes for Mozilla's reviewers (`amo/reviewer-notes.txt`) and the release's "What's new". It needs two repository secrets, `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, from an [API key on Firefox Add-ons](https://addons.mozilla.org/developers/addon/api/key/). A failed submission can be retried from the Actions tab with **Run workflow** and the release's tag.
+Publishing a GitHub release runs a second one, **Firefox Add-ons**, which submits that version of the extension to Firefox Add-ons with the notes for Mozilla's reviewers (`amo/reviewer-notes.txt`) and the release's "What's new", and sets the listing's description to `amo/description.txt` as it is in that release. The new description shows on Firefox Add-ons as soon as the release is submitted, before Mozilla has approved the version. It needs two repository secrets, `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, from an [API key on Firefox Add-ons](https://addons.mozilla.org/developers/addon/api/key/). A failed submission can be retried from the Actions tab with **Run workflow** and the release's tag.
 
 ## License
 

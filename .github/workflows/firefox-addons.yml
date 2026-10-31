@@ -1,6 +1,6 @@
 # Submits each new release of the extension to Firefox Add-ons (addons.mozilla.org), with the notes for
-# Mozilla's reviewers (amo/reviewer-notes.txt) and the release's "What's new". Mozilla's review then runs as
-# for an upload by hand. There is no build step, so extension/ is sent as it is and no source package is needed.
+# Mozilla's reviewers (amo/reviewer-notes.txt) and the release's "What's new", and sets the listing's
+# description to amo/description.txt. Mozilla's review then runs as for an upload by hand. There is no build step, so extension/ is sent as it is and no source package is needed.
 #
 # Needs two repository secrets, from an API key created at https://addons.mozilla.org/developers/addon/api/key/:
 #   AMO_JWT_ISSUER   the "JWT issuer"
@@ -40,19 +40,21 @@ jobs:
             echo "::error::The extension is $version but the release is $TAG."
             exit 1
           fi
-      - name: Write this version's release notes and reviewer notes
+      - name: Write this version's release notes, reviewer notes and description
         env:
           RELEASE_NOTES: ${{ github.event.release.body }}
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           # The script and the reviewer notes come from this workflow's own commit, so a retry of a release
-          # made before they existed works too.
+          # made before they existed works too. The description comes from the release's own commit, checked
+          # out above, since it describes that version; a release without one leaves the listing's as it is.
           git fetch -q --depth=1 origin "$WORKFLOW_SHA"
           git show "FETCH_HEAD:.github/scripts/amo-metadata.mjs" > "$RUNNER_TEMP/amo-metadata.mjs"
           git show "FETCH_HEAD:amo/reviewer-notes.txt" > "$RUNNER_TEMP/reviewer-notes.txt"
           if [ -z "$RELEASE_NOTES" ]; then RELEASE_NOTES="$(gh release view "$TAG" --json body -q .body)"; fi
-          RELEASE_NOTES="$RELEASE_NOTES" node "$RUNNER_TEMP/amo-metadata.mjs" "$RUNNER_TEMP/amo-metadata.json" "$RUNNER_TEMP/reviewer-notes.txt"
+          RELEASE_NOTES="$RELEASE_NOTES" node "$RUNNER_TEMP/amo-metadata.mjs" "$RUNNER_TEMP/amo-metadata.json" \
+            "$RUNNER_TEMP/reviewer-notes.txt" amo/description.txt
       - name: Submit to Firefox Add-ons
         env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
