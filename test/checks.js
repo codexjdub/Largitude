@@ -27,18 +27,27 @@
     results.scrollTop = results.scrollHeight;
   }
 
-  // What Largitude shows in a document: whether the popup is open, the file name of the full image in it, the
-  // gallery counter ("2 / 3") and where it is. The thumbnail standing in for the full image comes first in the
-  // popup, the full image last.
+  // What Largitude shows in a document: whether the popup is open, the file name of the full image or video in
+  // it, the gallery counter ("2 / 3"), any note ("Saved"), where it is, and the video. The thumbnail standing in
+  // for the full image comes first in the popup, the full image or video last.
   function popupIn(doc) {
     const host = doc.querySelector('largitude-popup');
     if (!host || host.style.display === 'none' || !host.matches(':popover-open')) return { open: false };
     const children = [...host.shadowRoot.children];
-    const images = children.filter((el) => el.localName === 'img');
-    const full = images.length > 1 ? images[images.length - 1] : null;
+    const media = children.filter((el) => el.localName === 'img' || el.localName === 'video');
+    const full = media.length > 1 ? media[media.length - 1] : null;
     const src = full && full.style.display !== 'none' ? full.src.split('/').pop() : '';
-    const counter = children.find((el) => el.style.display !== 'none' && /^\d+ \/ \d+$/.test(el.textContent));
-    return { open: true, src, counter: counter ? counter.textContent : '', box: host.getBoundingClientRect() };
+    const shown = (test) => children.find((el) => el.style.display !== 'none' && test(el.textContent));
+    const counter = shown((text) => /^\d+ \/ \d+$/.test(text));
+    const note = shown((text) => /[a-z]/i.test(text));
+    return {
+      open: true,
+      src,
+      counter: counter ? counter.textContent : '',
+      note: note ? note.textContent : '',
+      box: host.getBoundingClientRect(),
+      video: full && full.localName === 'video' ? full : null,
+    };
   }
 
   function moveTo(doc, x, y) {
@@ -127,6 +136,16 @@
     await away(document);
   }
 
+  // Whether a key pressed with the popup open reaches the page.
+  function pressReaches(key) {
+    let reached = false;
+    const listener = () => (reached = true);
+    document.addEventListener('keydown', listener);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    document.removeEventListener('keydown', listener);
+    return reached;
+  }
+
   // S saves the image shown. Only with ?standalone, where nothing can be saved, so a run with the extension
   // doesn't fill the Downloads folder: the key must not reach the page, and the popup says it couldn't save.
   async function checkSaveKey() {
@@ -134,17 +153,41 @@
     await away(document);
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
-    let reached = false;
-    const listener = () => (reached = true);
-    document.addEventListener('keydown', listener);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true }));
-    document.removeEventListener('keydown', listener);
-    const noted = await until(() => {
-      const host = document.querySelector('largitude-popup');
-      return host && [...host.shadowRoot.children].some((node) => node.style.display !== 'none' && /save/i.test(node.textContent));
-    }, 1000);
+    const reached = pressReaches('s');
+    const noted = await until(() => /save/i.test(popupIn(document).note || ''), 1000);
     report(!reached && noted, 'S saves, without reaching the page, and the popup says how it went', reached ? 'the page got the key' : 'no note showed');
     await away(document);
+  }
+
+  // A video plays muted and looping, M and Space work on it without reaching the page, and closing the popup
+  // stops it loading.
+  async function checkVideo(card) {
+    const name = card.querySelector('h2').textContent;
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    const video = await until(() => popupIn(document).video, 3000);
+    if (!video) {
+      report(false, name + ': plays a video', 'no video showed');
+      await away(document);
+      return;
+    }
+    const start = video.currentTime;
+    const moving = await until(() => !video.paused && video.currentTime !== start, 2000);
+    report(moving && video.muted && video.loop, name + ': the video plays, muted and looping', `paused ${video.paused}, muted ${video.muted}, loop ${video.loop}`);
+
+    const mReached = pressReaches('m');
+    const sound = await until(() => /sound/i.test(popupIn(document).note || ''), 1000);
+    report(!mReached && sound, name + ': M turns the sound on or off, or says there is none', mReached ? 'the page got the key' : 'no note showed');
+
+    const spaceReached = pressReaches(' ');
+    const paused = await until(() => video.paused, 1000);
+    pressReaches(' ');
+    const playing = await until(() => !video.paused, 1000);
+    report(!spaceReached && paused && playing, name + ': Space pauses and plays again', spaceReached ? 'the page got the key' : `paused ${paused}, played again ${playing}`);
+
+    await away(document);
+    const stopped = video.paused && !video.getAttribute('src') && video.networkState === HTMLMediaElement.NETWORK_EMPTY;
+    report(stopped, name + ': closing the popup stops the video loading', `paused ${video.paused}, src ${video.getAttribute('src')}, network state ${video.networkState}`);
   }
 
   async function checkCard(card) {
@@ -234,6 +277,7 @@
     lines.length = 0;
     window.largitudeChecks = { done: false, lines };
     for (const card of document.querySelectorAll('.case')) await checkCard(card);
+    for (const card of document.querySelectorAll('.case[data-video]')) await checkVideo(card);
     await checkBehavior();
     if (standalone) await checkSaveKey();
     const failed = lines.filter((line) => !line.ok).length;

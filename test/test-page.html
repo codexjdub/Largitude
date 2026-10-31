@@ -181,6 +181,27 @@
       <p class="expect">Hovering the middle photo shows gallery 2 of 3 as "2 / 3"</p>
     </section>
 
+    <section class="case" data-expect="clip-640x360.webm" data-video>
+      <h2>Link to a video file</h2>
+      <p>A thumbnail inside a link to a video.</p>
+      <a href="images/clip-640x360.webm"><img class="target" src="images/thumb-200x150.svg" width="200" height="150" alt="Thumbnail linked to a video"></a>
+      <p class="expect">Plays the 640×360 video, muted and looping</p>
+    </section>
+
+    <section class="case" data-expect="clip-640x360.webm">
+      <h2>Video on the page</h2>
+      <p>A small video playing a plain file, as X plays its GIFs.</p>
+      <video class="target" src="images/clip-640x360.webm" width="200" height="113" muted loop autoplay playsinline></video>
+      <p class="expect">Plays the video bigger, from where the page's is</p>
+    </section>
+
+    <section class="case" data-expect="none">
+      <h2>Streaming video</h2>
+      <p>A video put together by the page (a blob: address), as YouTube's and most players are.</p>
+      <video class="target" id="streaming" width="200" height="113" muted loop autoplay playsinline></video>
+      <p class="expect">Shows nothing</p>
+    </section>
+
     <section class="case" data-expect="none">
       <h2>Covered by an opaque element</h2>
       <p>A panel with a background of its own lies over an image.</p>
@@ -232,6 +253,7 @@
     <li>With a popup open, scroll: it closes.</li>
     <li>On the Reddit gallery, moving your fingers (or the wheel) down shows the next image, and one swipe on a trackpad moves one image, however long its momentum lasts. At the last image, the next swipe scrolls the page and closes the popup.</li>
     <li>With a popup open, press S: Firefox saves the full-size image (asking where first, if it's set to), and the popup says "Saved". With a gallery, it saves the image the popup shows at the time.</li>
+    <li>On a video card, the popup plays the video muted and looping, with a bar along the bottom showing how far it has played (none for the test video, which doesn't say how long it is). M says "No sound" (the test video has none), Space pauses and plays, and S saves the video.</li>
     <li>Add <code>127.0.0.1</code> under <b>Sites to leave alone</b> in Largitude's settings, then hover here again without reloading: nothing shows. Remove it, and the popups are back.</li>
   </ol>
 </main>
@@ -251,6 +273,10 @@
   }
   const dialog = document.getElementById('dialog');
   document.getElementById('open-dialog').addEventListener('click', () => dialog.showModal());
+  // The streaming card's video plays from a blob: address, as players that fetch a video in pieces do.
+  fetch('images/clip-640x360.webm')
+    .then((response) => response.blob())
+    .then((blob) => (document.getElementById('streaming').src = URL.createObjectURL(blob)));
 
   // ?standalone loads Largitude's content scripts, the ones the manifest lists, into the page itself, with a
   // stand-in for the two extension APIs they use, so the cases can be tried in any browser. Closed shadow roots

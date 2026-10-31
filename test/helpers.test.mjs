@@ -7,8 +7,19 @@ import vm from 'node:vm';
 
 const context = vm.createContext({ URL });
 vm.runInContext(readFileSync(new URL('../extension/helpers.js', import.meta.url), 'utf8'), context, { filename: 'helpers.js' });
-const { hostOf, isExcluded, parseSrcset, largestCandidate, isImageFileUrl, addSite, fullSizeUrls, fileNameFor, placePopup, isWorthShowing } =
-  context;
+const {
+  hostOf,
+  isExcluded,
+  parseSrcset,
+  largestCandidate,
+  isImageFileUrl,
+  isVideoFileUrl,
+  addSite,
+  fullSizeUrls,
+  fileNameFor,
+  placePopup,
+  isWorthShowing,
+} = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -80,6 +91,20 @@ test('isImageFileUrl goes by the extension of the path', () => {
   assert.equal(isImageFileUrl('https://example.com/gallery/'), false);
   assert.equal(isImageFileUrl('ftp://example.com/cat.jpg'), false);
   assert.equal(isImageFileUrl('nonsense'), false);
+  assert.equal(isImageFileUrl('https://example.com/clip.mp4'), false);
+});
+
+test('isVideoFileUrl goes by the extension of the path, for the types Firefox plays', () => {
+  assert.equal(isVideoFileUrl('https://example.com/clips/cat.MP4'), true);
+  assert.equal(isVideoFileUrl('https://video.twimg.com/tweet_video/GaBcDeF.mp4?tag=12'), true);
+  assert.equal(isVideoFileUrl('https://example.com/a.webm'), true);
+  assert.equal(isVideoFileUrl('https://example.com/a.m4v'), true);
+  assert.equal(isVideoFileUrl('https://example.com/a.ogv'), true);
+  // GIFV is a page that plays a video, not a video; a site rule knows the file behind it.
+  assert.equal(isVideoFileUrl('https://i.imgur.com/AbC.gifv'), false);
+  assert.equal(isVideoFileUrl('https://example.com/cat.jpg'), false);
+  assert.equal(isVideoFileUrl('blob:https://example.com/1234'), false);
+  assert.equal(isVideoFileUrl('nonsense'), false);
 });
 
 // The real sites' rules are tried in sites.test.mjs; these made-up ones try the way they're run.

@@ -1,14 +1,15 @@
-Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. The popup opens beside the pointer, fitted to the window, and closes when you move away.
+Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. Videos too: links to video files, Imgur GIFVs, X GIFs and small videos on a page play bigger. The popup opens beside the pointer, fitted to the window, and closes when you move away.
 
 • Finds the largest version a page offers: a link to the image file, the biggest of the sizes the page lists, or the image itself.
 • Knows where Reddit and X keep the original uploads, so you see the full image rather than the page's smaller copy.
 • Galleries: on a Reddit gallery or an X post with several photos, the arrow keys or the mouse wheel move through them, with a counter showing where you are.
-• Press S to save the image the popup shows.
+• Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses.
+• Press S to save the image or video the popup shows.
 • Sees through the transparent layers many sites put over their images, and into web components.
 • Opens at its final size right away, with the thumbnail standing in while the full image loads.
 • Stays out of the way: the mouse goes right through it, it skips images already at full size and small icons, and a click, Escape or scrolling closes it.
 • Settings: sites to leave alone, and which way the wheel moves through a gallery. Changes apply at once.
 
-Largitude collects no data and sends nothing anywhere. It only loads the images the page refers to, or larger versions of them from the same image service.
+Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them from the same service.
 
-Coming next: YouTube and Imgur, and muted previews of short videos.
+Coming next: YouTube, Reddit video, and more image hosts.

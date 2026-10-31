@@ -1,8 +1,9 @@
-// Largitude in each frame: finds the image under the pointer and, once the pointer has rested on it, shows it
-// full size in a popup beside the pointer. When the image is one of a post's several (a Reddit gallery, the
-// photos of an X post), ← → and the mouse wheel move through them, and S saves the image shown. It runs in the
-// content-script world, out of the page's reach. The popup sits in the page's top layer, above everything the
-// page shows, and lets the mouse through.
+// Largitude in each frame: finds the image or video under the pointer and, once the pointer has rested on it,
+// shows it full size in a popup beside the pointer, videos muted and looping. When the image is one of a post's
+// several (a Reddit gallery, the photos of an X post), ← → and the mouse wheel move through them; S saves what
+// the popup shows, and for a video M turns the sound on or off and Space pauses. It runs in the content-script
+// world, out of the page's reach. The popup sits in the page's top layer, above everything the page shows, and
+// lets the mouse through.
 // parseSrcset, fullSizeUrls, fileNameFor, placePopup and the other helpers come from helpers.js, and SITES from
 // the site rules in sites/, all loaded first.
 (() => {
@@ -27,12 +28,12 @@
   let reverseWheel = false; // the "Reverse the mouse wheel in galleries" setting
   let pointer = { x: 0, y: 0 };
   let frame = 0; // the animation frame that will look under the pointer
-  let hovered = null; // the image under the pointer: { el, thumb, thumbSize, urls, shownSize }
+  let hovered = null; // the image or video under the pointer: { el, thumb, thumbSize, urls, shownSize }
   let dismissed = null; // an element whose popup was closed (click, Escape, nothing to show), until the pointer leaves it
   let timer = 0;
   let spinnerTimer = 0;
   let sizeFrame = 0;
-  let loading = null; // the <img> being loaded, shown once its size is known
+  let loading = null; // the <img> or <video> being loaded, shown once its size is known
   let shown = false;
   let gallery = null; // while the popup shows one of several images: { items: [{ thumb, thumbSize, urls }], index }
   let preloaded = []; // the gallery's images on either side of the one shown, loading in advance
@@ -71,34 +72,41 @@
       const found = imageOf(el);
       if (found) return found;
       // Text under the pointer is what's being hovered, and an element with a background color of its own
-      // hides what's under it, so the search stops at either. Transparent overlays are looked through.
-      if (hasOwnText(el) || isOpaque(el)) break;
+      // hides what's under it, as does a video, so the search stops at any of them. Transparent overlays are
+      // looked through.
+      if (hasOwnText(el) || isOpaque(el) || el.localName === 'video') break;
     }
     // An image that ignores the mouse (pointer-events: none) isn't among the layers: look inside the small ones.
     for (const el of searched) {
       const found = imageInside(el, x, y);
       if (found) return found;
     }
-    // A link to an image file, with no image of its own to show.
+    // A link to an image or video file, with no image of its own to show.
     const link = layers.length ? closestLink(layers[0]) : null;
-    if (link && isImageFileUrl(link.href)) {
+    if (link && isMediaLink(link.href)) {
       return { el: link, thumb: '', thumbSize: null, urls: withRules([link.href]), shownSize: null };
     }
     return null;
   }
 
-  // The image an element shows, as an <img> or as a CSS background, with the addresses to try for its full size.
+  // The image an element shows, as an <img>, a <video> or a CSS background, with the addresses to try for its
+  // full size.
   function imageOf(el) {
     const rect = el.getBoundingClientRect();
     if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) return null;
     let found = null;
-    if (el.localName === 'img') {
-      found = sourcesOf(el);
+    if (el.localName === 'video') {
+      found = videoSourcesOf(el);
+      if (!found) return null;
     } else {
-      const background = backgroundOf(el);
-      found = { thumb: background, thumbSize: null, urls: withRules([linkedImage(el), background]) };
+      if (el.localName === 'img') {
+        found = sourcesOf(el);
+      } else {
+        const background = backgroundOf(el);
+        found = { thumb: background, thumbSize: null, urls: withRules([linkedMedia(el), background]) };
+      }
+      if (!/^(?:https?|data|blob):/i.test(found.thumb)) return null;
     }
-    if (!/^(?:https?|data|blob):/i.test(found.thumb)) return null;
     return { ...found, el, shownSize: { width: rect.width, height: rect.height } };
   }
 
@@ -112,7 +120,21 @@
     return {
       thumb,
       thumbSize: img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null,
-      urls: withRules([linkedImage(img), largest ? largest.url : '', thumb]),
+      urls: withRules([linkedMedia(img), largest ? largest.url : '', thumb]),
+    };
+  }
+
+  // A video the page plays from a file, which the popup plays again, bigger, with the page's poster standing in
+  // until it starts. A streaming player's video has a blob: address, put together piece by piece, which can't be
+  // played anywhere else, so it's left alone.
+  function videoSourcesOf(video) {
+    const source = video.querySelector('source[src]');
+    const src = video.currentSrc || video.src || (source ? source.src : '');
+    if (!/^https?:/i.test(src)) return null;
+    return {
+      thumb: video.poster || '',
+      thumbSize: video.videoWidth > 0 ? { width: video.videoWidth, height: video.videoHeight } : null,
+      urls: withRules([src]),
     };
   }
 
@@ -185,7 +207,7 @@
     const rect = el.getBoundingClientRect();
     const view = viewport();
     if (rect.width > view.width / 2 || rect.height > view.height / 2) return null;
-    const images = el.getElementsByTagName('img');
+    const images = el.querySelectorAll('img, video');
     for (let i = 0; i < images.length && i < 20; i++) {
       const box = images[i].getBoundingClientRect();
       if (x < box.left || x >= box.right || y < box.top || y >= box.bottom) continue;
@@ -221,10 +243,15 @@
     return link && typeof link.href === 'string' ? link : null;
   }
 
-  // The address of a link around `el` to an image file, if there is one.
-  function linkedImage(el) {
+  // The address of a link around `el` to an image or video file, if there is one.
+  function linkedMedia(el) {
     const link = closestLink(el);
-    return link && isImageFileUrl(link.href) ? link.href : '';
+    return link && isMediaLink(link.href) ? link.href : '';
+  }
+
+  // Whether a link leads to an image or video file, or to one the site rules know, such as Imgur's GIFV pages.
+  function isMediaLink(url) {
+    return isImageFileUrl(url) || isVideoFileUrl(url) || fullSizeUrls(url).length > 0;
   }
 
   function viewport() {
@@ -251,9 +278,11 @@
 
   let host = null;
   let thumbImg = null;
-  let fullImg = null;
+  let full = null; // the full-size <img> or <video> in the popup
   let spinner = null;
   let counter = null;
+  let progress = null;
+  let progressFrame = 0;
   let toast = null;
   let toastTimer = 0;
 
@@ -323,6 +352,18 @@
       'font-variant-numeric': 'tabular-nums',
       display: 'none',
     });
+    // How far a video has played: a thin bar along the bottom.
+    progress = make('div');
+    setStyles(progress, {
+      position: 'absolute',
+      'z-index': '1',
+      left: '0',
+      bottom: '0',
+      width: '0',
+      height: '3px',
+      background: 'rgba(255, 255, 255, 0.75)',
+      display: 'none',
+    });
     // A short note at the bottom, such as "Saved".
     toast = make('div');
     setStyles(toast, {
@@ -339,7 +380,7 @@
       'white-space': 'nowrap',
       display: 'none',
     });
-    shadow.append(thumbImg, spinner, counter, toast);
+    shadow.append(thumbImg, spinner, counter, progress, toast);
   }
 
   function note(text) {
@@ -379,7 +420,7 @@
     const view = viewport();
     const size = 30;
     thumbImg.style.display = 'none';
-    if (fullImg) fullImg.style.display = 'none';
+    if (full) full.style.display = 'none';
     placeHost({
       left: Math.max(0, Math.min(pointer.x + 16, view.width - size - 8)),
       top: Math.max(0, Math.min(pointer.y + 16, view.height - size - 8)),
@@ -388,50 +429,101 @@
     });
   }
 
-  // Shows `img`, whose size is known, for `item` (the hovered image, or one of its gallery's).
-  function showImage(item, img, box) {
+  // Shows `media`, an image or video whose size is known, for `item` (the hovered image or video, or one of its
+  // gallery's).
+  function showMedia(item, media, box) {
     clearTimeout(spinnerTimer);
     spinnerTimer = 0;
     if (!host) createHost();
     spinner.style.display = 'none';
-    // The thumbnail, already loaded, stands in while the full image arrives over it, if it's the same shape.
-    if (item.thumb && item.thumb !== img.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(img))) {
+    // The thumbnail, already loaded, stands in while the full image arrives over it, or until the video's first
+    // frame, if it's the same shape.
+    if (item.thumb && item.thumb !== media.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(media))) {
       thumbImg.src = item.thumb;
       thumbImg.style.display = 'block';
     } else {
       thumbImg.removeAttribute('src');
       thumbImg.style.display = 'none';
     }
-    if (fullImg !== img) {
-      if (fullImg) {
-        fullImg.remove();
-        fullImg.removeAttribute('src');
+    if (full !== media) {
+      if (full) {
+        full.remove();
+        release(full);
       }
-      fullImg = img;
-      setStyles(img, FILL);
-      host.shadowRoot.insertBefore(img, spinner);
+      full = media;
+      setStyles(media, FILL);
+      host.shadowRoot.insertBefore(media, spinner);
     }
-    img.style.display = 'block';
+    media.style.display = 'block';
     if (gallery) counter.textContent = gallery.index + 1 + ' / ' + gallery.items.length;
     counter.style.display = gallery ? 'block' : 'none';
     placeHost(box);
     shown = true;
     listenToWheel(!!gallery);
+    if (isVideo(media)) play(media, item.el);
   }
 
-  const sizeOf = (img) => ({ width: img.naturalWidth, height: img.naturalHeight });
+  const isVideo = (media) => !!media && media.localName === 'video';
+  const sizeOf = (media) =>
+    isVideo(media) ? { width: media.videoWidth, height: media.videoHeight } : { width: media.naturalWidth, height: media.naturalHeight };
   const sameShape = (a, b) => Math.abs(a.width / a.height - b.width / b.height) <= 0.03 * (b.width / b.height);
+
+  // Starts the popup's video, from where the page's own is when it's that video, and the bar showing its progress.
+  function play(video, pageVideo) {
+    if (isVideo(pageVideo) && pageVideo.currentTime > 0 && (pageVideo.currentSrc || pageVideo.src) === video.src) {
+      video.currentTime = pageVideo.currentTime;
+    }
+    resume(video, 'Autoplay is off on this site: Space plays');
+    cancelAnimationFrame(progressFrame);
+    trackProgress();
+  }
+
+  // Plays `video`, with a note if Firefox doesn't allow it: muted videos play on their own unless autoplay is
+  // turned off altogether.
+  function resume(video, blocked) {
+    const playing = video.play();
+    if (playing && playing.catch) {
+      playing.catch((err) => {
+        if (err && err.name === 'NotAllowedError' && full === video) note(blocked);
+      });
+    }
+  }
+
+  function trackProgress() {
+    progressFrame = 0;
+    if (!shown || !isVideo(full)) {
+      progress.style.display = 'none';
+      return;
+    }
+    // A video still loading, or one that never says how long it is, has no progress to show.
+    const length = full.duration;
+    const done = length > 0 && length < Infinity ? full.currentTime / length : 0;
+    progress.style.width = Math.min(100, done * 100) + '%';
+    progress.style.display = done > 0 ? 'block' : 'none';
+    progressFrame = requestAnimationFrame(trackProgress);
+  }
+
+  // Stops `media` loading: dropping its address stops an image's download, and a video's once it's told to load
+  // anew, with nothing.
+  function release(media) {
+    media.removeAttribute('src');
+    if (isVideo(media)) {
+      media.pause();
+      media.load();
+    }
+  }
 
   function hide() {
     clearTimeout(timer);
     clearTimeout(spinnerTimer);
     cancelAnimationFrame(sizeFrame);
-    timer = spinnerTimer = sizeFrame = 0;
-    // Dropping the address stops the download; the handlers below ignore an image that's no longer `loading`.
+    cancelAnimationFrame(progressFrame);
+    timer = spinnerTimer = sizeFrame = progressFrame = 0;
+    // Releasing stops the download; the handlers below ignore an image or video that's no longer `loading`.
     const old = loading;
     loading = null;
-    if (old && old !== fullImg) old.removeAttribute('src');
-    preloaded.forEach((img) => img.removeAttribute('src'));
+    if (old && old !== full) release(old);
+    preloaded.forEach(release);
     preloaded = [];
     hovered = null;
     gallery = null;
@@ -444,13 +536,14 @@
     } catch (err) {
       // Already hidden.
     }
-    if (fullImg) {
-      fullImg.remove();
-      fullImg.removeAttribute('src');
-      fullImg = null;
+    if (full) {
+      full.remove();
+      release(full);
+      full = null;
     }
     thumbImg.removeAttribute('src');
     counter.style.display = 'none';
+    progress.style.display = 'none';
     clearTimeout(toastTimer);
     toast.style.display = 'none';
   }
@@ -462,37 +555,59 @@
 
   // ---- Loading ----
 
-  // Loads the first of `urls` that works and calls `done` with it as soon as its size is known, long before it
-  // has finished loading, so the popup opens at its final size and the image fills in. `done` gets null when
-  // none works. Starting another load cancels this one.
-  function fetchImage(urls, done, index = 0) {
+  // Loads the first of `urls` that works, as an <img>, or a <video> for a video file, and calls `done` with it as
+  // soon as its size is known, long before it has finished loading, so the popup opens at its final size and the
+  // image fills in. `done` gets null when none works. Starting another load cancels this one.
+  function fetchMedia(urls, done, index = 0) {
+    if (loading && loading !== full) release(loading);
+    loading = null;
     if (index >= urls.length) {
       done(null);
       return;
     }
-    const img = make('img');
-    img.alt = '';
-    loading = img;
+    const video = isVideoFileUrl(urls[index]);
+    const media = video ? makeVideo() : make('img');
+    loading = media;
     let sized = false;
     const ready = () => {
-      if (sized || loading !== img || !(img.naturalWidth > 0 && img.naturalHeight > 0)) return;
+      if (sized || loading !== media) return;
+      const size = sizeOf(media);
+      if (!(size.width > 0 && size.height > 0)) return;
       sized = true;
-      done(img);
+      done(media);
     };
-    img.addEventListener('load', ready);
-    img.addEventListener('error', () => {
-      if (loading !== img) return;
+    const next = () => {
+      if (loading !== media) return;
       if (sized) dismiss();
-      else fetchImage(urls, done, index + 1);
-    });
-    img.src = urls[index];
+      else fetchMedia(urls, done, index + 1);
+    };
+    media.addEventListener('error', next);
     cancelAnimationFrame(sizeFrame);
+    if (video) {
+      // A video's size comes with its metadata; one without a picture is sound only.
+      media.addEventListener('loadedmetadata', () => (sizeOf(media).width > 0 ? ready() : next()));
+      media.src = urls[index];
+      return;
+    }
+    media.alt = '';
+    media.addEventListener('load', ready);
+    media.src = urls[index];
     const poll = () => {
       sizeFrame = 0;
       ready();
-      if (!sized && loading === img && !img.complete) sizeFrame = requestAnimationFrame(poll);
+      if (!sized && loading === media && !media.complete) sizeFrame = requestAnimationFrame(poll);
     };
     poll();
+  }
+
+  // Muted, so it may play on its own, and looping, as a GIF does.
+  function makeVideo() {
+    const video = make('video');
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    return video;
   }
 
   // The image the page shows reports the size it's shown at when the browser picked it from a srcset, not its
@@ -502,15 +617,15 @@
     const target = hovered;
     if (!target) return;
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, true);
-    fetchImage(target.urls, (img) => {
+    fetchMedia(target.urls, (media) => {
       if (target !== hovered) return;
-      const box = img && placePopup(sizeOf(img), pointer, viewport(), target.shownSize);
+      const box = media && placePopup(sizeOf(media), pointer, viewport(), target.shownSize);
       if (!box || !isWorthShowing(box, target.shownSize)) {
         dismiss();
         return;
       }
       gallery = galleryOf(target.el);
-      showImage(target, img, box);
+      showMedia(target, media, box);
       preloadAround();
     });
   }
@@ -527,11 +642,11 @@
     counter.textContent = to + 1 + ' / ' + gallery.items.length;
     clearTimeout(spinnerTimer);
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
-    fetchImage(item.urls, (img) => {
+    fetchMedia(item.urls, (media) => {
       if (target !== hovered || !gallery || gallery.index !== to) return;
-      const box = img && placePopup(sizeOf(img), pointer, viewport());
+      const box = media && placePopup(sizeOf(media), pointer, viewport());
       if (box) {
-        showImage(item, img, box);
+        showMedia(item, media, box);
         preloadAround();
         return;
       }
@@ -543,13 +658,14 @@
     });
   }
 
+  // The gallery's images on either side of the one shown. Videos aren't loaded in advance: they're large.
   function preloadAround() {
-    preloaded.forEach((img) => img.removeAttribute('src'));
+    preloaded.forEach(release);
     preloaded = [];
     if (!gallery) return;
     [gallery.index + 1, gallery.index - 1].forEach((index) => {
       const item = gallery.items[index];
-      if (!item || !item.urls.length) return;
+      if (!item || !item.urls.length || isVideoFileUrl(item.urls[0])) return;
       const img = make('img');
       img.src = item.urls[0];
       preloaded.push(img);
@@ -600,11 +716,11 @@
 
   // ---- Saving ----
 
-  // Saves the image the popup shows, as the full-size file it came from. The background script does the
+  // Saves the image or video the popup shows, as the full-size file it came from. The background script does the
   // download: content scripts can't.
   async function save() {
-    if (!shown || !fullImg) return;
-    const url = fullImg.currentSrc || fullImg.src;
+    if (!shown || !full) return;
+    const url = full.currentSrc || full.src;
     let result = 'failed';
     try {
       result = await browser.runtime.sendMessage({ type: 'save', url, filename: fileNameFor(url) });
@@ -612,6 +728,29 @@
       // No background script to answer.
     }
     note({ saved: 'Saved', canceled: 'Not saved' }[result] || "Couldn't save");
+  }
+
+  // ---- Video ----
+
+  // M: the sound on or off. Firefox knows whether a video has any.
+  function toggleSound(video) {
+    if (video.mozHasAudio === false) {
+      note('No sound');
+      return;
+    }
+    video.muted = !video.muted;
+    note(video.muted ? 'Sound off' : 'Sound on');
+  }
+
+  // Space: pause, or play again.
+  function togglePause(video) {
+    if (video.paused) {
+      resume(video, "Firefox didn't allow it to play");
+      note('Playing');
+    } else {
+      video.pause();
+      note('Paused');
+    }
   }
 
   // ---- Following the pointer ----
@@ -658,8 +797,9 @@
   document.addEventListener('visibilitychange', () => document.hidden && hide());
   // Leaving the window (or entering a frame in it).
   document.addEventListener('mouseout', (event) => !event.relatedTarget && (hovered || shown) && hide(), passive);
-  // Escape closes the popup, ← → move through a gallery and S saves, without the keys also reaching the page,
-  // which might close a dialog, move a carousel or have an S shortcut of its own.
+  // Escape closes the popup, ← → move through a gallery, S saves, and for a video M turns the sound on or off and
+  // Space pauses, without the keys also reaching the page, which might close a dialog, move a carousel, scroll or
+  // have shortcuts of its own.
   window.addEventListener(
     'keydown',
     (event) => {
@@ -671,12 +811,16 @@
       }
       if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping(event.target)) return;
       const step = gallery ? { ArrowRight: 1, ArrowLeft: -1 }[event.key] : 0;
-      const saving = event.key === 's' || event.key === 'S';
-      if (!step && !saving) return;
+      const key = event.key.toLowerCase();
+      const video = isVideo(full) ? full : null;
+      if (!step && key !== 's' && !(video && (key === 'm' || key === ' '))) return;
       event.preventDefault();
       event.stopPropagation();
       if (step) go(step);
-      else if (!event.repeat) save();
+      else if (event.repeat) return;
+      else if (key === 's') save();
+      else if (key === 'm') toggleSound(video);
+      else togglePause(video);
     },
     true
   );

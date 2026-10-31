@@ -32,7 +32,7 @@ function isExcluded(list, url) {
     .some((site) => host === site || host.endsWith('.' + site));
 }
 
-// ---- Image addresses ----
+// ---- Image and video addresses ----
 
 // The candidates in a srcset attribute, as [{ url, w, x }], following the HTML parsing rules closely enough for
 // real pages: an address runs to the next whitespace, so commas inside one (Cloudinary's w_400,c_fill, or a
@@ -85,9 +85,18 @@ function largestCandidate(candidates) {
 
 // Whether an address names an image file, going by its extension, as in a link to photo.jpg.
 function isImageFileUrl(url) {
+  return hasFileType(url, /\.(?:jpe?g|png|gif|webp|avif|bmp|svg|jxl)$/i);
+}
+
+// Whether an address names a video file Firefox plays, going by its extension, as in a link to clip.mp4.
+function isVideoFileUrl(url) {
+  return hasFileType(url, /\.(?:mp4|m4v|webm|ogv)$/i);
+}
+
+function hasFileType(url, extension) {
   try {
     const parsed = new URL(url);
-    return /^https?:$/.test(parsed.protocol) && /\.(?:jpe?g|png|gif|webp|avif|bmp|svg|jxl)$/i.test(parsed.pathname);
+    return /^https?:$/.test(parsed.protocol) && extension.test(parsed.pathname);
   } catch (err) {
     return false;
   }

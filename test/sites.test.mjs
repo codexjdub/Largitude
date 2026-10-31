@@ -73,6 +73,29 @@ test('X: photos, profile pictures and banners at their original size', () => {
   assert.deepEqual(original('https://pbs.twimg.com/profile_banners/42/1700000000/1500x500'), []);
 });
 
+test("X: a GIF's still leads to its video, then to the still at its largest", () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://pbs.twimg.com/tweet_video_thumb/GaB-cD_eF.jpg'), [
+    'https://video.twimg.com/tweet_video/GaB-cD_eF.mp4',
+    'https://pbs.twimg.com/tweet_video_thumb/GaB-cD_eF?format=jpg&name=orig',
+  ]);
+  assert.deepEqual(larger('https://pbs.twimg.com/tweet_video_thumb/GaBcDeF?format=jpg&name=small'), [
+    'https://video.twimg.com/tweet_video/GaBcDeF.mp4',
+    'https://pbs.twimg.com/tweet_video_thumb/GaBcDeF?format=jpg&name=orig',
+  ]);
+  // A real video's still has no video at an address of its own.
+  assert.deepEqual(larger('https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC.jpg'), [
+    'https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC?format=jpg&name=orig',
+  ]);
+});
+
+test('Imgur: a GIFV is its MP4', () => {
+  assert.deepEqual(plain(fullSizeUrls('https://i.imgur.com/AbC123x.gifv')), ['https://i.imgur.com/AbC123x.mp4']);
+  assert.deepEqual(plain(fullSizeUrls('https://i.imgur.com/AbC123x.gifv?1')), ['https://i.imgur.com/AbC123x.mp4']);
+  assert.deepEqual(plain(fullSizeUrls('https://i.imgur.com/AbC123x.mp4')), []);
+  assert.deepEqual(plain(fullSizeUrls('https://example.com/AbC123x.gifv')), []);
+});
+
 test('other sites are left alone', () => {
   assert.deepEqual(plain(fullSizeUrls('https://example.com/photo.jpg?name=small')), []);
   assert.deepEqual(plain(fullSizeUrls('not a url')), []);

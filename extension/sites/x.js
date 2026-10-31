@@ -1,7 +1,10 @@
-// X: its photos, profile pictures and banners at their largest, and the photos of a post.
+// X: its GIFs as the videos they are, its photos, profile pictures and banners at their largest, and the photos
+// of a post.
 addSite({
   name: 'X',
   larger: [
+    // A GIF is an MP4 on video.twimg.com, named after its still. The still, at its largest, stays as the fallback.
+    [/^https?:\/\/pbs\.twimg\.com\/tweet_video_thumb\/([\w-]+)(?:\.\w+)?(?:[?#].*)?$/, 'https://video.twimg.com/tweet_video/$1.mp4'],
     // Photos and video stills. Older addresses carry the format in the path: <id>.jpg, or <id>.jpg:large.
     [
       /^(https?:\/\/pbs\.twimg\.com\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\/[^?#]+?)\.(jpe?g|png|webp)(?::\w+)?(?:[?#].*)?$/i,
