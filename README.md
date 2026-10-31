@@ -4,7 +4,7 @@ Largitude is a Firefox extension: hover over a thumbnail or a link to an image, 
 
 ## Install
 
-Largitude isn't on Firefox Add-ons yet. To try a local copy, see [Development](#development).
+Install Largitude from [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/largitude/). It needs Firefox 142 or later, on the desktop. To try a local copy instead, see [Development](#development).
 
 ## How it works
 
