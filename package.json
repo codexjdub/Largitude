@@ -1,0 +1,11 @@
+{
+  "name": "largitude",
+  "private": true,
+  "description": "Largitude: a Firefox extension that shows the full-size image when you hover over a thumbnail or an image link",
+  "license": "MIT",
+  "scripts": {
+    "lint": "npx --yes web-ext@10 lint --source-dir extension",
+    "serve": "node test/serve.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

@@ -1,0 +1,15 @@
+BUILD INSTRUCTIONS
+There is no build step. The add-on is the extension/ folder of the source repository as it is: every file in it is hand-written, and nothing is minified, transpiled or generated.
+
+WHY THE CODE WORKS THIS WAY
+content.js runs in each frame's content-script world, not the page's own. It looks at what is under the pointer and shows the full-size version of the image there in a popup: an element in a shadow root, shown as a manual popover so it sits above the page. Its styles are set through element.style, not a stylesheet, so a page's Content-Security-Policy can't block them.
+
+helpers.js holds the functions with no side effects (parsing srcset, placing the popup, matching the list of sites to leave alone, and the site rules), kept in a file of their own so they can be unit-tested in Node. The site rules work out, from an image's address on Reddit (preview.redd.it) or X (pbs.twimg.com), the address of the original upload on the same service (i.redd.it, or pbs.twimg.com with name=orig), which is tried first.
+
+When the image is one of a post's several (a Reddit gallery, an X post's photos), the arrow keys and the mouse wheel move through them. The wheel listener is added only while such a popup is open, and removed when it closes.
+
+background.js gives each frame its settings: whether its site is on the user's list of sites to leave alone (going by the tab's page as well as the frame's own address), and which way the mouse wheel moves through a gallery.
+
+The downloads permission: when the user presses S with the popup open, background.js saves the image the popup shows with downloads.download, under a file name taken from its address. Firefox's own setting decides whether to ask where to save; a download from a private window is made private.
+
+The add-on loads only the images the page itself refers to, or larger versions of them from the same image services. It collects no data and sends nothing anywhere.

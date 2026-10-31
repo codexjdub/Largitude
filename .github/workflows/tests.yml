@@ -1,0 +1,23 @@
+# Checks the extension with Mozilla's add-on checker, then runs the tests.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check the extension with Mozilla's add-on checker
+        run: npm run lint
+      - name: Run the tests
+        run: npm test

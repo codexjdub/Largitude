@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Largitude settings</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5d6066; --line: #e2e2dc; --accent: #1a66d2; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1f; --fg: #f2f2f2; --muted: #a3a3aa; --line: #34343a; --accent: #5ea8ff; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  fieldset { border: 0; padding: 0; margin: 0 0 18px; }
+  legend, .title { font-weight: 600; display: block; margin: 0 0 4px; font-size: inherit; }
+  .hint { color: var(--muted); margin: 2px 0 0; font-size: 13px; }
+  input, textarea, button { font: inherit; }
+  textarea { width: 100%; max-width: 460px; height: 5.5em; box-sizing: border-box; }
+  label.check { display: flex; gap: 8px; align-items: baseline; }
+  fieldset .hint { max-width: 460px; }
+  #status { color: var(--muted); }
+</style>
+</head>
+<body>
+  <form id="options">
+    <fieldset>
+      <label class="title" for="excluded">Sites to leave alone</label>
+      <textarea id="excluded" spellcheck="false" placeholder="example.com"></textarea>
+      <p class="hint">One per line, as a name like the one above or a page's address. A site includes its subdomains. Changes apply at once, on pages already open too.</p>
+    </fieldset>
+    <fieldset>
+      <label class="check"><input id="reverseWheel" type="checkbox"> Reverse the mouse wheel in galleries</label>
+      <p class="hint">Moving your fingers or the wheel down shows the next image. On a Mac, Largitude goes by natural scrolling, which macOS has on unless you turned it off. If the wheel goes the wrong way for you, turn this on.</p>
+    </fieldset>
+  </form>
+  <p id="status" role="status"></p>
+  <script src="defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

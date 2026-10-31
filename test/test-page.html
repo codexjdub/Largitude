@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Largitude test page</title>
+<style>
+  :root { --bg: #f6f6f3; --card: #ffffff; --fg: #1d1d1f; --muted: #5d6066; --line: #e2e2dc; --pass: #15803d; --fail: #b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161618; --card: #1f1f22; --fg: #f2f2f2; --muted: #a3a3aa; --line: #34343a; --pass: #4ade80; --fail: #f87171; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  .intro { color: var(--muted); max-width: 720px; }
+  code { font-size: 13px; }
+  button { font: inherit; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+  /* A fixed height, so results coming in don't move the cards: the browser would send mouse events for that. */
+  #results { white-space: pre-wrap; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 12px 0; height: 14em; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--card); }
+  #results .pass { color: var(--pass); }
+  #results .fail { color: var(--fail); }
+  .cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+  .case { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .case p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+  .case .expect { margin: 8px 0 0; color: var(--fg); font-weight: 600; }
+  .stage { position: relative; width: 200px; height: 150px; }
+  .stage img { display: block; }
+  .overlay { position: absolute; inset: 0; }
+  .dim { background: rgba(0, 0, 0, 0.3); }
+  .cover { background: var(--card); display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); }
+  .bg { width: 200px; height: 150px; background: url(images/full-1600x1200.svg) center / cover; }
+  .card { background: var(--card); width: 200px; height: 150px; }
+  iframe { border: 1px dashed var(--line); box-sizing: border-box; width: 100%; height: 360px; display: block; }
+  .slides { list-style: none; margin: 0; padding: 0; }
+  .slides li + li { display: none; }
+  .slides figure { margin: 0; }
+  .slides img { display: block; width: 200px; height: 150px; object-fit: contain; background: #000; }
+  .photos { display: grid; grid-template-columns: repeat(3, 70px); gap: 4px; }
+  .photos img { display: block; width: 70px; height: 70px; object-fit: cover; }
+  .quoted img { display: block; width: 60px; height: 40px; object-fit: cover; margin-top: 6px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  ol li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Largitude test page</h1>
+  <p class="intro">Each card is one kind of image Largitude should handle, or should leave alone. Hover over the image in a card for a moment: a green <b>FULL</b> image means Largitude found the full-size version, a gray or amber one means it showed a smaller one. <b>Run checks</b> hovers each card for you and lists what happened; click it, then move the mouse off the page (onto the tab bar, say) until it's done, since a real mouse over the page interferes. Open this page through <code>npm run serve</code> (http://127.0.0.1:8766/test/test-page.html) so the frame card works; add <code>?standalone</code> to try it without the extension, in any browser.</p>
+  <p><button id="run" type="button">Run checks</button></p>
+  <div id="results" role="status"></div>
+
+  <div class="cases">
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Link to an image file</h2>
+      <p>A thumbnail inside a link to the full image.</p>
+      <a href="images/full-1600x1200.svg"><img class="target" src="images/thumb-200x150.svg" width="200" height="150" alt="Linked thumbnail"></a>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>srcset</h2>
+      <p>The browser shows a smaller candidate; the largest is 1600w.</p>
+      <img class="target" src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/mid-800x600.svg 800w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="srcset thumbnail">
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>&lt;picture&gt;</h2>
+      <p>The largest candidate is in a &lt;source&gt;, not on the &lt;img&gt;.</p>
+      <picture>
+        <source type="image/svg+xml" srcset="images/mid-800x600.svg 800w, images/full-1600x1200.svg 1600w" sizes="200px">
+        <img class="target" src="images/thumb-200x150.svg" width="200" height="150" alt="Picture thumbnail">
+      </picture>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>CSS background image</h2>
+      <p>A div showing the image as its background, scaled down.</p>
+      <div class="bg target" role="img" aria-label="Background image"></div>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Transparent overlay</h2>
+      <p>An empty element lies over the image and gets the mouse, as on many social sites.</p>
+      <div class="stage">
+        <img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image under an overlay">
+        <div class="overlay target"></div>
+      </div>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Dimming overlay</h2>
+      <p>A see-through dark layer over the image, as on hover effects.</p>
+      <div class="stage">
+        <img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image under a dimming overlay">
+        <div class="overlay dim target"></div>
+      </div>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Image that ignores the mouse</h2>
+      <p>The image has pointer-events: none, inside a card with a background.</p>
+      <div class="card target">
+        <img style="pointer-events: none" src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image that ignores the mouse">
+      </div>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Open shadow root</h2>
+      <p>The image is inside a web component, as on Reddit.</p>
+      <open-host class="target"></open-host>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg" data-standalone-expect="none">
+      <h2>Closed shadow root</h2>
+      <p>The page hid the component's insides from scripts; Firefox still lets extensions in.</p>
+      <closed-host class="target"></closed-host>
+      <p class="expect">Shows FULL 1600×1200 (nothing with ?standalone)</p>
+    </section>
+
+    <section class="case" data-expect="wide-2400x800.svg">
+      <h2>Cropped thumbnail</h2>
+      <p>A wide image cropped to a square by object-fit: cover.</p>
+      <img class="target" src="images/wide-2400x800.svg" style="object-fit: cover" width="150" height="150" alt="Cropped thumbnail">
+      <p class="expect">Shows FULL wide 2400×800, uncropped</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Text link to an image</h2>
+      <p>No thumbnail at all, only a link.</p>
+      <a class="target" href="images/full-1600x1200.svg">A link to a photo</a>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Broken link</h2>
+      <p>The link points to a missing file; the srcset still has the full image.</p>
+      <a href="images/missing.png"><img class="target" src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Thumbnail with a broken link"></a>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="mid-800x600.svg">
+      <h2>Page shows its largest copy</h2>
+      <p>The browser picked the image from a srcset, so it reports the size it's shown at, not its own.</p>
+      <img class="target" src="images/mid-800x600.svg" srcset="images/mid-800x600.svg 800w" sizes="200px" width="200" height="150" alt="Largest copy already shown">
+      <p class="expect">Shows mid 800×600, every time</p>
+    </section>
+
+    <section class="case" data-gallery="gallery-1.svg gallery-2.svg gallery-3.svg" data-start="1">
+      <h2>Reddit gallery</h2>
+      <p>Three slides in a &lt;gallery-carousel&gt;. Only the first is in view; the others haven't loaded yet.</p>
+      <gallery-carousel>
+        <ul class="slides">
+          <li><figure><img class="media-lightbox-img target" src="images/gallery-1.svg" width="200" height="150" alt="Slide 1"></figure></li>
+          <li><figure><img class="media-lightbox-img" data-lazy-src="images/gallery-2.svg" width="200" height="150" alt="Slide 2"></figure></li>
+          <li><figure><img class="media-lightbox-img" data-lazy-src="images/gallery-3.svg" width="200" height="150" alt="Slide 3"></figure></li>
+        </ul>
+      </gallery-carousel>
+      <p class="expect">Shows gallery 1 of 3 as "1 / 3"; ← → and the wheel move through all three</p>
+    </section>
+
+    <section class="case" data-gallery="gallery-1.svg gallery-2.svg gallery-3.svg" data-start="2">
+      <h2>X post with photos</h2>
+      <p>Three photos in one post, and a quoted post's photo that isn't one of them.</p>
+      <article>
+        <div class="photos">
+          <a href="/u/status/42/photo/1"><img src="images/gallery-1.svg" alt="Photo 1"></a>
+          <a href="/u/status/42/photo/2"><img class="target" src="images/gallery-2.svg" alt="Photo 2"></a>
+          <a href="/u/status/42/photo/3"><img src="images/gallery-3.svg" alt="Photo 3"></a>
+        </div>
+        <a class="quoted" href="/v/status/7/photo/1"><img src="images/full-1600x1200.svg" alt="Quoted photo"></a>
+      </article>
+      <p class="expect">Hovering the middle photo shows gallery 2 of 3 as "2 / 3"</p>
+    </section>
+
+    <section class="case" data-expect="none">
+      <h2>Covered by an opaque element</h2>
+      <p>A panel with a background of its own lies over an image.</p>
+      <div class="stage">
+        <img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image under a panel">
+        <div class="overlay cover target">A panel over an image</div>
+      </div>
+      <p class="expect">Shows nothing</p>
+    </section>
+
+    <section class="case" data-expect="none">
+      <h2>Already full size</h2>
+      <p>The page shows the image at its own size; there's nothing bigger.</p>
+      <img class="target" src="images/exact-200x150.svg" width="200" height="150" alt="Image at full size">
+      <p class="expect">Shows nothing</p>
+    </section>
+
+    <section class="case" data-expect="none">
+      <h2>Small icon</h2>
+      <p>Images under 24 px are left alone, even with a bigger version.</p>
+      <img class="target" src="images/icon-16.svg" srcset="images/icon-16.svg 16w, images/full-1600x1200.svg 1600w" sizes="16px" width="16" height="16" alt="Icon">
+      <p class="expect">Shows nothing</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg" data-frame>
+      <h2>In a frame</h2>
+      <p>The image is in an iframe on the same site. The popup stays inside the frame, so it needs a frame with room.</p>
+      <iframe class="target" src="frame.html" title="Frame with an image"></iframe>
+      <p class="expect">Shows FULL 1600×1200, within the frame</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg" data-dialog>
+      <h2>In a modal dialog</h2>
+      <p>The popup must show above the page's own dialog and its backdrop.</p>
+      <button type="button" id="open-dialog">Open the dialog</button>
+      <dialog id="dialog">
+        <p>Hover the image, then close.</p>
+        <img class="target" src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image in a dialog">
+        <form method="dialog"><button>Close</button></form>
+      </dialog>
+      <p class="expect">Shows FULL 1600×1200 above the dialog</p>
+    </section>
+  </div>
+
+  <h2>By hand</h2>
+  <ol>
+    <li>With a popup open, move off the image: it closes. Move back: it opens again after a moment.</li>
+    <li>With a popup open, press Escape or click: it closes and stays closed until you move off the image and back.</li>
+    <li>With a popup open, scroll: it closes.</li>
+    <li>On the Reddit gallery, moving your fingers (or the wheel) down shows the next image, and one swipe on a trackpad moves one image, however long its momentum lasts. At the last image, the next swipe scrolls the page and closes the popup.</li>
+    <li>With a popup open, press S: Firefox saves the full-size image (asking where first, if it's set to), and the popup says "Saved". With a gallery, it saves the image the popup shows at the time.</li>
+    <li>Add <code>127.0.0.1</code> under <b>Sites to leave alone</b> in Largitude's settings, then hover here again without reloading: nothing shows. Remove it, and the popups are back.</li>
+  </ol>
+</main>
+
+<script>
+  const fixtureImage = '<img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="">';
+  for (const [name, mode] of [['open-host', 'open'], ['closed-host', 'closed']]) {
+    customElements.define(name, class extends HTMLElement {
+      connectedCallback() {
+        if (this.done) return;
+        this.done = true;
+        this.style.display = 'block';
+        this.style.width = '200px';
+        this.attachShadow({ mode }).innerHTML = fixtureImage;
+      }
+    });
+  }
+  const dialog = document.getElementById('dialog');
+  document.getElementById('open-dialog').addEventListener('click', () => dialog.showModal());
+
+  // ?standalone loads Largitude's content script into the page itself, with a stand-in for the two extension
+  // APIs it uses, so the cases can be tried in any browser. Closed shadow roots are out of its reach there.
+  if (new URLSearchParams(location.search).has('standalone')) {
+    window.browser = { runtime: { sendMessage: async () => false }, storage: { onChanged: { addListener() {} } } };
+    for (const src of ['../extension/helpers.js', '../extension/content.js']) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      document.head.append(script);
+    }
+    document.querySelector('iframe').src = 'frame.html?standalone';
+  }
+</script>
+<script src="checks.js"></script>
+</body>
+</html>
