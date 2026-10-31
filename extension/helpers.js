@@ -1,6 +1,6 @@
 // Functions with no side effects, used by the content script and the background script and kept apart from
-// both so the tests can run them in Node. They are plain function declarations, so every script loaded after
-// this file sees them.
+// both so the tests can run them in Node, and addSite, which the site rules in sites/ are added with. They are
+// plain function declarations, so every script loaded after this file sees them.
 
 // ---- Sites to leave alone ----
 
@@ -95,39 +95,34 @@ function isImageFileUrl(url) {
 
 // ---- Site rules ----
 
-// Larger versions of an image that its address points to, best first, from what is known of the site that
-// serves it. Each is tried before the address it was made from, which stays as the fallback.
+// What Largitude knows about particular sites: one file each in sites/, loaded after this one, which passes
+// addSite an object with
+//   name     the site's name
+//   larger   [find, replace] pairs for an image's address: when the regular expression `find` matches it, the
+//            address with `replace` put in (a string with $1 and the like, or a function, as String.replace
+//            takes them) is a larger version of the image
+//   gallery  optional, (el, page) → the images of the post `el` is in, when it has several: { images, index },
+//            where images[index] is `el`'s <img>; `page` has content.js's closestAcross and closestLink
+// A var, like the function declarations here, so that it's a global the scripts loaded after this one see.
+var SITES = [];
+
+function addSite(site) {
+  SITES.push(site);
+}
+
+// Larger versions of an image that its address points to, best first, from the site rules. Each is tried before
+// the address it was made from, which stays as the fallback.
 function fullSizeUrls(url) {
-  let parsed = null;
-  try {
-    parsed = new URL(url);
-  } catch (err) {
-    return [];
-  }
-  const { hostname, pathname, origin } = parsed;
-  // Reddit shows copies at most 1080 px wide (preview.redd.it); the original upload is on i.redd.it, under the
-  // copy's id. Newer copies put words from the post's title before the id: some-title-v0-<id>.png.
-  if (hostname === 'preview.redd.it') {
-    const match = /^\/(?:.*-v\d+-)?([a-z0-9]+)\.(jpe?g|png|gif|webp)$/i.exec(pathname);
-    return match ? ['https://i.redd.it/' + match[1] + '.' + match[2]] : [];
-  }
-  if (hostname === 'pbs.twimg.com') {
-    // X's photos and video stills: name= picks the size (small, medium, large, orig, …). Older addresses carry
-    // the format in the path instead: <id>.jpg, or <id>.jpg:large.
-    if (/^\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//.test(pathname)) {
-      const old = /^(.+?)\.(jpe?g|png|webp)(?::\w+)?$/i.exec(pathname);
-      if (old) return [origin + old[1] + '?format=' + old[2].toLowerCase() + '&name=orig'];
-      parsed.searchParams.set('name', 'orig');
-      return parsed.href === url ? [] : [parsed.href];
+  const urls = [];
+  if (typeof url !== 'string') return urls;
+  for (const site of SITES) {
+    for (const [find, replace] of site.larger || []) {
+      if (!find.test(url)) continue;
+      const larger = url.replace(find, replace);
+      if (larger !== url && urls.indexOf(larger) === -1) urls.push(larger);
     }
-    // Profile pictures are cut down from the original, named with _normal, _bigger, _400x400 and the like.
-    const avatar = /^(\/profile_images\/.+?)_(?:normal|bigger|mini|reasonably_small|\d+x\d+)(\.\w+)$/.exec(pathname);
-    if (avatar) return [origin + avatar[1] + avatar[2]];
-    // Profile banners: the last part of the path is the size; 1500x500 is the largest.
-    const banner = /^(\/profile_banners\/\d+\/\d+)\/\d+x\d+$/.exec(pathname);
-    if (banner && !pathname.endsWith('/1500x500')) return [origin + banner[1] + '/1500x500'];
   }
-  return [];
+  return urls;
 }
 
 // A file name to save the image at `url` under: the last part of its path, with the image's type added when the

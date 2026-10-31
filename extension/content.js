@@ -3,7 +3,8 @@
 // photos of an X post), ← → and the mouse wheel move through them, and S saves the image shown. It runs in the
 // content-script world, out of the page's reach. The popup sits in the page's top layer, above everything the
 // page shows, and lets the mouse through.
-// parseSrcset, fullSizeUrls, fileNameFor, placePopup and the other helpers come from helpers.js, loaded first.
+// parseSrcset, fullSizeUrls, fileNameFor, placePopup and the other helpers come from helpers.js, and SITES from
+// the site rules in sites/, all loaded first.
 (() => {
   'use strict';
 
@@ -233,56 +234,17 @@
 
   // ---- Galleries ----
 
-  // The images of the post `el` is in, when it has several: { items, index }, where items[index] is `el`'s.
+  // What the site rules' gallery functions may use to look around the page.
+  const page = { closestAcross, closestLink };
+
+  // The images of the post `el` is in, when it has several: { items, index }, where items[index] is `el`'s. The
+  // site rules know which elements make up a post.
   function galleryOf(el) {
-    return redditGallery(el) || xGallery(el);
-  }
-
-  // A Reddit gallery: <gallery-carousel> holds every slide as an <li>, the ones not in view yet included.
-  function redditGallery(el) {
-    const carousel = closestAcross(el, 'gallery-carousel');
-    if (!carousel) return null;
-    const slides = [];
-    const items = carousel.getElementsByTagName('li');
-    for (let i = 0; i < items.length; i++) {
-      const img = slideImage(items[i]);
-      if (img) slides.push({ li: items[i], img });
+    for (const site of SITES) {
+      const found = site.gallery ? site.gallery(el, page) : null;
+      if (found) return { items: found.images.map((img) => sourcesOf(img)), index: found.index };
     }
-    const index = slides.findIndex((slide) => slide.li.contains(el));
-    if (slides.length < 2 || index < 0) return null;
-    return { items: slides.map((slide) => sourcesOf(slide.img)), index };
-  }
-
-  // A slide's picture, rather than the blurred copy of it that fills the space around it.
-  function slideImage(li) {
-    const images = li.getElementsByTagName('img');
-    let fallback = null;
-    for (let i = 0; i < images.length; i++) {
-      if (images[i].classList.contains('media-lightbox-img')) return images[i];
-      if (!fallback && !images[i].closest('.post-background-image-filter')) fallback = images[i];
-    }
-    return fallback;
-  }
-
-  // The photos of an X post, in order: each is a link to …/status/<post>/photo/<number> in the post's
-  // <article>. A quoted post's photos have another post's number, so they're left out.
-  function xGallery(el) {
-    const link = closestLink(el);
-    const match = link && /\/status\/(\d+)\/photo\/(\d+)$/.exec(link.pathname);
-    const post = match && closestAcross(link, 'article');
-    if (!post) return null;
-    const photos = [];
-    const links = post.querySelectorAll('a[href*="/status/' + match[1] + '/photo/"]');
-    for (let i = 0; i < links.length; i++) {
-      const number = /\/photo\/(\d+)$/.exec(links[i].pathname);
-      const img = links[i].querySelector('img');
-      if (!number || !img || photos.some((photo) => photo.number === Number(number[1]))) continue;
-      photos.push({ number: Number(number[1]), img });
-    }
-    photos.sort((a, b) => a.number - b.number);
-    const index = photos.findIndex((photo) => photo.number === Number(match[2]));
-    if (photos.length < 2 || index < 0) return null;
-    return { items: photos.map((photo) => sourcesOf(photo.img)), index };
+    return null;
   }
 
   // ---- The popup ----

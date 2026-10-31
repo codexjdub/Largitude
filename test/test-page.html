@@ -252,16 +252,21 @@
   const dialog = document.getElementById('dialog');
   document.getElementById('open-dialog').addEventListener('click', () => dialog.showModal());
 
-  // ?standalone loads Largitude's content script into the page itself, with a stand-in for the two extension
-  // APIs it uses, so the cases can be tried in any browser. Closed shadow roots are out of its reach there.
+  // ?standalone loads Largitude's content scripts, the ones the manifest lists, into the page itself, with a
+  // stand-in for the two extension APIs they use, so the cases can be tried in any browser. Closed shadow roots
+  // are out of their reach there.
   if (new URLSearchParams(location.search).has('standalone')) {
     window.browser = { runtime: { sendMessage: async () => false }, storage: { onChanged: { addListener() {} } } };
-    for (const src of ['../extension/helpers.js', '../extension/content.js']) {
-      const script = document.createElement('script');
-      script.src = src;
-      script.async = false;
-      document.head.append(script);
-    }
+    fetch('../extension/manifest.json')
+      .then((response) => response.json())
+      .then((manifest) => {
+        for (const src of manifest.content_scripts[0].js) {
+          const script = document.createElement('script');
+          script.src = '../extension/' + src;
+          script.async = false;
+          document.head.append(script);
+        }
+      });
     document.querySelector('iframe').src = 'frame.html?standalone';
   }
 </script>

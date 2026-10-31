@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 const context = vm.createContext({ URL });
 vm.runInContext(readFileSync(new URL('../extension/helpers.js', import.meta.url), 'utf8'), context, { filename: 'helpers.js' });
-const { hostOf, isExcluded, parseSrcset, largestCandidate, isImageFileUrl, fullSizeUrls, fileNameFor, placePopup, isWorthShowing } =
+const { hostOf, isExcluded, parseSrcset, largestCandidate, isImageFileUrl, addSite, fullSizeUrls, fileNameFor, placePopup, isWorthShowing } =
   context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -82,51 +82,27 @@ test('isImageFileUrl goes by the extension of the path', () => {
   assert.equal(isImageFileUrl('nonsense'), false);
 });
 
-test("fullSizeUrls turns Reddit's copies into the original upload", () => {
-  const original = (url) => plain(fullSizeUrls(url));
-  assert.deepEqual(original('https://preview.redd.it/abc123def.png?width=1080&format=png&auto=webp&s=0f1e'), [
-    'https://i.redd.it/abc123def.png',
-  ]);
-  // Newer copies put words from the post's title before the id.
-  assert.deepEqual(original('https://preview.redd.it/hyprland-my-minimalist-setup-v0-x9y8z7w6.jpg?width=640&crop=smart&s=1'), [
-    'https://i.redd.it/x9y8z7w6.jpg',
-  ]);
-  assert.deepEqual(original('https://preview.redd.it/k3j4h5.gif?format=png8&s=2'), ['https://i.redd.it/k3j4h5.gif']);
-  // Link previews of other sites have no original on Reddit.
-  assert.deepEqual(original('https://external-preview.redd.it/AbC.jpg?auto=webp&s=3'), []);
-  assert.deepEqual(original('https://i.redd.it/abc123def.png'), []);
-});
-
-test("fullSizeUrls asks X for its photos' original size", () => {
-  const original = (url) => plain(fullSizeUrls(url));
-  assert.deepEqual(original('https://pbs.twimg.com/media/GaBcDeF?format=jpg&name=small'), [
-    'https://pbs.twimg.com/media/GaBcDeF?format=jpg&name=orig',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/media/GaBcDeF?format=webp&name=900x900'), [
-    'https://pbs.twimg.com/media/GaBcDeF?format=webp&name=orig',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/media/GaBcDeF.jpg:large'), [
-    'https://pbs.twimg.com/media/GaBcDeF?format=jpg&name=orig',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC.jpg?name=small'), [
-    'https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC?format=jpg&name=orig',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/media/GaBcDeF?format=jpg&name=orig'), []);
-  assert.deepEqual(original('https://pbs.twimg.com/profile_images/1234/Ab_cD_normal.jpg'), [
-    'https://pbs.twimg.com/profile_images/1234/Ab_cD.jpg',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/profile_images/1234/photo_400x400.png'), [
-    'https://pbs.twimg.com/profile_images/1234/photo.png',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/profile_banners/42/1700000000/600x200'), [
-    'https://pbs.twimg.com/profile_banners/42/1700000000/1500x500',
-  ]);
-  assert.deepEqual(original('https://pbs.twimg.com/profile_banners/42/1700000000/1500x500'), []);
-});
-
-test('fullSizeUrls leaves other sites alone', () => {
-  assert.deepEqual(plain(fullSizeUrls('https://example.com/photo.jpg?name=small')), []);
-  assert.deepEqual(plain(fullSizeUrls('not a url')), []);
+// The real sites' rules are tried in sites.test.mjs; these made-up ones try the way they're run.
+test('fullSizeUrls runs every rule that matches, in order, without repeats or unchanged addresses', () => {
+  const small = /^https:\/\/a\.test\/small\/(\w+)\.jpg$/;
+  addSite({
+    name: 'A',
+    larger: [
+      [small, 'https://a.test/large/$1.jpg'],
+      [small, (match, name) => 'https://a.test/original/' + name + '.png'],
+    ],
+  });
+  addSite({
+    name: 'B',
+    larger: [
+      [/^(https:\/\/a\.test\/)small\/(\w+\.jpg)$/, '$1large/$2'],
+      [/^https:\/\/a\.test\/small\//, (match) => match],
+    ],
+  });
+  addSite({ name: 'C, galleries only', gallery: () => null });
+  assert.deepEqual(plain(fullSizeUrls('https://a.test/small/cat.jpg')), ['https://a.test/large/cat.jpg', 'https://a.test/original/cat.png']);
+  assert.deepEqual(plain(fullSizeUrls('https://b.test/small/cat.jpg')), []);
+  assert.deepEqual(plain(fullSizeUrls(undefined)), []);
 });
 
 test('fileNameFor names a saved image after its address', () => {

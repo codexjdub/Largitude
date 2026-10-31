@@ -34,7 +34,9 @@ npm run lint
 npm test
 ```
 
-`npm run lint` checks the extension with Mozilla's add-on checker (`web-ext lint`, fetched by `npx` on first use). `npm test` runs the unit tests of `extension/helpers.js` with Node's own test runner (Node 20+); nothing needs installing.
+`npm run lint` checks the extension with Mozilla's add-on checker (`web-ext lint`, fetched by `npx` on first use). `npm test` runs the unit tests of `extension/helpers.js` and the site rules with Node's own test runner (Node 20+); nothing needs installing.
+
+What Largitude knows about particular sites is in `extension/sites/`, one file per site, each added with `addSite` (from `helpers.js`). A site's `larger` rules are pairs of a regular expression and its replacement: when the expression matches an image's address, the address with the replacement put in is a larger version, tried first. Its `gallery` function, if it has one, finds the images of the post an image is in. A new site's file goes in the manifest's content scripts, between `helpers.js` and `content.js` (a test checks), and its rules get tests in `test/sites.test.mjs`.
 
 There is no build step: `extension/` is the extension, exactly as it goes to Firefox Add-ons. To try it, open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…**, and choose `extension/manifest.json`. Firefox removes it when it restarts. `npx web-ext@10 build --source-dir extension` packages it as a zip in `web-ext-artifacts/`, which **Load Temporary Add-on…** takes too.
 

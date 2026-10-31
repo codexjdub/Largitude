@@ -11,15 +11,19 @@
 <body>
   <a href="images/full-1600x1200.svg"><img class="target" src="images/thumb-200x150.svg" width="120" height="90" alt="Thumbnail in a frame"></a>
   <script>
-    // With ?standalone, as on the test page: Largitude's content script loaded into the frame itself.
+    // With ?standalone, as on the test page: Largitude's content scripts loaded into the frame itself.
     if (new URLSearchParams(location.search).has('standalone')) {
       window.browser = { runtime: { sendMessage: async () => false }, storage: { onChanged: { addListener() {} } } };
-      for (const src of ['../extension/helpers.js', '../extension/content.js']) {
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = false;
-        document.head.append(script);
-      }
+      fetch('../extension/manifest.json')
+        .then((response) => response.json())
+        .then((manifest) => {
+          for (const src of manifest.content_scripts[0].js) {
+            const script = document.createElement('script');
+            script.src = '../extension/' + src;
+            script.async = false;
+            document.head.append(script);
+          }
+        });
     }
   </script>
 </body>
