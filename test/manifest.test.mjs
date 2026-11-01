@@ -1,4 +1,5 @@
-// Checks the manifest against extension/, which goes to Firefox Add-ons as it is.
+// Checks what goes to Firefox Add-ons: the manifest against extension/, which is sent as it is, and the notes for
+// Mozilla's reviewers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -32,4 +33,10 @@ test('every site file is a content script, after helpers.js and before content.j
 // The release workflow compares it with the release's tag, v<version>.
 test('the version is x.y.z', () => {
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+});
+
+// Firefox Add-ons turns down a version whose reviewer notes are longer, after the release is published.
+test('the reviewer notes fit in 3000 characters', () => {
+  const notes = readFileSync(new URL('../amo/reviewer-notes.txt', import.meta.url), 'utf8');
+  assert.ok(notes.length <= 3000, `${notes.length} characters`);
 });
