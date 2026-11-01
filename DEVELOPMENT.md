@@ -29,6 +29,8 @@ Bump `version` in `extension/manifest.json` for each release. The release's note
 
 Publishing a GitHub release runs another GitHub Action, **Firefox Add-ons**, which submits that version of the extension to Firefox Add-ons with the notes for Mozilla's reviewers (`amo/reviewer-notes.txt`) and the release's "What's new", and sets the listing's description to `amo/description.txt` as it is in that release. The new description shows on Firefox Add-ons as soon as the release is submitted, before Mozilla has approved the version. It needs two repository secrets, `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, from an [API key on Firefox Add-ons](https://addons.mozilla.org/developers/addon/api/key/). A failed submission can be retried from the Actions tab with **Run workflow** and the release's tag.
 
+The listing's other fields, the ones that stay the same from one version to the next (its website), are in `amo/listing.json`. A change to it on `main` runs **Firefox Add-ons listing**, which sends it to Firefox Add-ons straight away, with the same secrets.
+
 The [README](README.md) and the listing's description (`amo/description.txt`) are what users read: keep them in step with what Largitude does.
 
 ## How it works
@@ -41,7 +43,8 @@ The details are in the code's comments. This is a map of where to find them, wit
 - **Placing** (`placePopup`). Beside the pointer, on the side that shows the image largest, or over the whole window when no side shows it well, so where the pointer happens to be never decides whether there's a popup.
 - **Galleries** (each site's `gallery`, `go`, `onWheel`). The wheel moves one image per gesture, so a trackpad's momentum counts once. It's only listened to while a gallery is open: a listener that can stop scrolling makes Firefox wait on it at every turn of the wheel.
 - **Videos** (`videoSourcesOf`, `makeVideo`). What a page's `<video>` plays loads as a video whatever its address, since many sites leave off the file extension.
-- **Keys** (the `keydown` listener, `isTyping`). Only while the popup is open, and they don't reach the page. Keys typed in a text field are left alone, following the focus into web components, whose keys seem to come from the component itself.
+- **Keys** (the `keydown` listener, `isTyping`). Only while the popup is open, and they don't reach the page. Keys typed in a text field are left alone, following the focus into web components, whose keys seem to come from the component itself. Shift is the exception (`keepAway`): held, it keeps popups away, read from each mouse move so it can't get stuck.
 - **Saving** (`save`, in content.js and background.js). The background script downloads the file, since content scripts can't.
 - **Isolation** (`createHost`). The popup is a `popover`, in the top layer above the page's own dialogs, with its styles set on its elements, which a page's content security policy can't block.
 - **Settings** (`settingsFor`). Decided for each frame, going by the tab's page too, so a frame embedded on a site to leave alone is left alone.
+- **Toolbar button** (`browser.action.onClicked`, `showState`, in background.js; `listWithSite` and `listWithoutSite` in helpers.js). It edits the sites to leave alone, and its badge follows the list for each tab.

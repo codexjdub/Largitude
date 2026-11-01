@@ -22,6 +22,7 @@
   const SHOWABLE_TYPES = /^image\/(?:jpeg|png|gif|webp|avif|bmp|svg\+xml)$/i;
 
   let enabled = false;
+  let held = false; // Shift is held down, which keeps popups away
   let reverseWheel = false; // the "Reverse the mouse wheel in galleries" setting
   let pointer = { x: 0, y: 0 };
   let frame = 0; // the animation frame that will look under the pointer
@@ -785,7 +786,7 @@
 
   function update() {
     frame = 0;
-    if (!enabled) return;
+    if (!enabled || held) return;
     const found = findImage(pointer.x, pointer.y);
     const el = found ? found.el : null;
     if (dismissed && el !== dismissed) dismissed = null;
@@ -804,11 +805,22 @@
       if (hovered) dismiss();
       return;
     }
-    if (enabled && !frame) frame = requestAnimationFrame(update);
+    // The event says whether Shift is down, even when it was pressed or let go in another window.
+    keepAway(event.shiftKey);
+    if (enabled && !held && !frame) frame = requestAnimationFrame(update);
+  }
+
+  // Holding Shift keeps popups away, to move across images to something else, and pressing it closes one that's
+  // open. Once it's let go, the next move of the mouse opens popups again.
+  function keepAway(on) {
+    held = on;
+    if (held && (hovered || shown)) hide();
   }
 
   const passive = { capture: true, passive: true };
   window.addEventListener('mousemove', onMove, passive);
+  window.addEventListener('keydown', (event) => event.key === 'Shift' && keepAway(true), passive);
+  window.addEventListener('keyup', (event) => event.key === 'Shift' && keepAway(false), passive);
   window.addEventListener('mousedown', () => hovered && dismiss(), passive);
   // Scrolling closes the popup when it moves the image: the page scrolling, or a box the image is in. Other boxes
   // scrolling, such as a chat or a ticker, leave it open.

@@ -1,0 +1,28 @@
+# Updates the add-on's listing on Firefox Add-ons with amo/listing.json (the website and other fields that stay
+# the same from one version to the next) whenever that file changes on main. To run it again by hand:
+# Actions → Firefox Add-ons listing → Run workflow. Uses the same secrets as the Firefox Add-ons workflow.
+name: Firefox Add-ons listing
+
+on:
+  push:
+    branches: [main]
+    paths: [amo/listing.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Update the listing
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: node .github/scripts/amo-listing.mjs

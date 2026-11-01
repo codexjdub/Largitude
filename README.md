@@ -17,6 +17,7 @@ While it's open:
 | M | Turn a video's sound on or off |
 | Space | Pause or play a video |
 | Escape, or a click | Close it |
+| Shift, held down | Keep popups from opening, to move across images to something else; pressing it closes one that's open |
 
 The mouse wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Past the last one, it scrolls the page again.
 
@@ -31,9 +32,11 @@ It stays out of the way: the mouse goes right through the popup, it leaves alone
 
 ## Settings
 
+To turn Largitude off on a site, click its button in the toolbar while you're on that site: the button then shows "off" there. Click it again to turn Largitude back on. Firefox puts the button in the Extensions menu (the puzzle piece) at first; pin it to the toolbar to see the "off" badge.
+
 Largitude's settings are on its page in Firefox's **Add-ons and themes** (`about:addons`):
 
-- **Sites to leave alone**: one per line, such as `example.com` or a page's address copied from the address bar. Largitude does nothing there, subdomains included.
+- **Sites to leave alone**: one per line, such as `example.com` or a page's address copied from the address bar. Largitude does nothing there, subdomains included. The toolbar button adds sites here and takes them off.
 - **Reverse the mouse wheel in galleries**: scrolling down shows the previous image instead of the next.
 
 Changes apply at once, on pages already open too.

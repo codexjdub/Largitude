@@ -10,7 +10,7 @@ Videos: a link to a video file, a video the page plays from a file (not a blob: 
 
 When the image is one of a post's several, the arrow keys and the mouse wheel move through them. The wheel listener is added only while such a popup is open, and removed when it closes.
 
-background.js gives each frame its settings: whether its site is on the user's list of sites to leave alone (going by the tab's page as well as the frame's own address), and which way the mouse wheel moves through a gallery.
+background.js gives each frame its settings: whether its site is on the user's list of sites to leave alone (going by the tab's page as well as the frame's own address), and which way the mouse wheel moves through a gallery. Its toolbar button adds the tab's site to that list or takes it off, with an "off" badge where it applies.
 
 The downloads permission: when the user presses S with the popup open, background.js saves the image or video the popup shows with downloads.download, under a file name taken from its address. Firefox's own setting decides whether to ask where to save; a download from a private window is made private.
 

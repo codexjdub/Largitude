@@ -10,6 +10,9 @@ vm.runInContext(readFileSync(new URL('../extension/helpers.js', import.meta.url)
 const {
   hostOf,
   isExcluded,
+  pageHostOf,
+  listWithSite,
+  listWithoutSite,
   parseSrcset,
   largestCandidate,
   isImageFileUrl,
@@ -40,6 +43,33 @@ test('isExcluded matches a site and its subdomains, not look-alikes', () => {
   assert.equal(isExcluded('', 'https://example.com/'), false);
   assert.equal(isExcluded(list, 'about:blank'), false);
   assert.equal(isExcluded(list, 'not a url'), false);
+});
+
+test('pageHostOf gives the host of web pages only', () => {
+  assert.equal(pageHostOf('https://www.example.com/a?b'), 'www.example.com');
+  assert.equal(pageHostOf('http://localhost:8766/test/'), 'localhost');
+  assert.equal(pageHostOf('about:addons'), '');
+  assert.equal(pageHostOf('file:///Users/someone/photo.jpg'), '');
+  assert.equal(pageHostOf('moz-extension://abc/options.html'), '');
+  assert.equal(pageHostOf(undefined), '');
+});
+
+test('the toolbar button adds the site of a page to the list, without www.', () => {
+  assert.equal(listWithSite('', 'https://www.example.com/page'), 'example.com');
+  assert.equal(listWithSite('a.org\n\n', 'https://news.example.com/'), 'a.org\nnews.example.com');
+  assert.equal(listWithSite(undefined, 'https://example.com/'), 'example.com');
+  // Already left alone, or not a web page: the list stays as it is.
+  assert.equal(listWithSite('example.com', 'https://img.example.com/'), 'example.com');
+  assert.equal(listWithSite('a.org', 'about:blank'), 'a.org');
+  assert.equal(isExcluded(listWithSite('a.org', 'https://www.example.com/'), 'https://example.com/'), true);
+});
+
+test('the toolbar button, clicked again, takes off every entry that covers the page', () => {
+  const list = 'a.org\nexample.com, https://www.example.com/page\n*.cdn.net';
+  assert.equal(listWithoutSite(list, 'https://www.example.com/other'), 'a.org\n*.cdn.net');
+  assert.equal(isExcluded(listWithoutSite(list, 'https://www.example.com/'), 'https://www.example.com/'), false);
+  assert.equal(listWithoutSite(list, 'https://x.cdn.net/'), 'a.org\nexample.com\nhttps://www.example.com/page');
+  assert.equal(listWithoutSite('', 'https://example.com/'), '');
 });
 
 test('parseSrcset reads width and density descriptors', () => {

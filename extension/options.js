@@ -13,7 +13,7 @@ function show(text) {
 async function load() {
   const { options } = await browser.storage.local.get('options');
   const values = { ...DEFAULT_OPTIONS, ...options };
-  field('excluded').value = values.excluded;
+  if (field('excluded').value !== values.excluded) field('excluded').value = values.excluded;
   field('galleryWheelReversed').checked = values.galleryWheelReversed;
 }
 
@@ -29,4 +29,9 @@ async function save() {
 
 field('options').addEventListener('change', save);
 field('options').addEventListener('submit', (event) => event.preventDefault());
+// The toolbar button changes the sites to leave alone too: the page shows the list as it now is, so that saving
+// another change doesn't put back the old one.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.options) load();
+});
 load();

@@ -32,6 +32,35 @@ function isExcluded(list, url) {
     .some((site) => host === site || host.endsWith('.' + site));
 }
 
+// The host name of a web page's address, or '' for other pages (about:, file:, an add-on's own).
+function pageHostOf(url) {
+  try {
+    const parsed = new URL(url);
+    return /^https?:$/.test(parsed.protocol) ? parsed.hostname : '';
+  } catch (err) {
+    return '';
+  }
+}
+
+// The list with the site of the page at `url` added, by its host name without www., so that the rest of the
+// site is left alone too. The toolbar button adds the site of the tab it's clicked in.
+function listWithSite(list, url) {
+  const text = String(list || '');
+  const host = pageHostOf(url).replace(/^www\./, '');
+  if (!host || isExcluded(text, url)) return text;
+  const kept = text.replace(/\s+$/, '');
+  return kept ? kept + '\n' + host : host;
+}
+
+// The list without the entries that leave the page at `url` alone, one entry per line: the toolbar button,
+// clicked again, turns Largitude back on there.
+function listWithoutSite(list, url) {
+  return String(list || '')
+    .split(/[\s,]+/)
+    .filter((entry) => entry && !isExcluded(entry, url))
+    .join('\n');
+}
+
 // ---- Image and video addresses ----
 
 // The candidates in a srcset attribute, as [{ url, w, x }], following the HTML parsing rules closely enough for

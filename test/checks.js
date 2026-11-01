@@ -50,10 +50,10 @@
     };
   }
 
-  function moveTo(doc, x, y) {
+  function moveTo(doc, x, y, keys = {}) {
     const view = doc.defaultView;
     const target = doc.elementFromPoint(x, y) || doc.documentElement;
-    target.dispatchEvent(new view.MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true, composed: true, view }));
+    target.dispatchEvent(new view.MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true, composed: true, view, ...keys }));
     return { x, y };
   }
 
@@ -291,6 +291,18 @@
     await until(isOpen, 3000);
     await away(document);
     report(!isOpen(), 'moving off the image closes it');
+
+    point = await hover(document, el);
+    await until(isOpen, 3000);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true }));
+    report(!!(await until(() => !isOpen(), 500)), 'pressing Shift closes it');
+    moveTo(document, point.x + 3, point.y + 3, { shiftKey: true });
+    await wait(DELAY + 500);
+    report(!isOpen(), 'while Shift is held, resting on an image opens nothing');
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+    moveTo(document, point.x, point.y);
+    report(!!(await until(isOpen, 3000)), 'once Shift is let go, moving the mouse opens it again');
+    await away(document);
   }
 
   async function run() {
