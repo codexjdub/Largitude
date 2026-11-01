@@ -21,7 +21,7 @@ On every push, a GitHub Action, **Tests**, runs the add-on checker and the unit 
 
 ## Site rules
 
-What Largitude knows about particular sites is in `extension/sites/`, one file per site, each added with `addSite` (from `helpers.js`). A site's `larger` rules are pairs of a regular expression and its replacement: when the expression matches an image's address, the address with the replacement put in is a larger version, tried first. Its `gallery` function, if it has one, finds the images of the post an image is in. A new site's file goes in the manifest's content scripts, between `helpers.js` and `content.js` (a test checks), and its rules get tests in `test/sites.test.mjs`.
+What Largitude knows about particular sites is in `extension/sites/`, one file per site, each added with `addSite` (from `helpers.js`). `image-services.js` is the exception: it holds the rules for image services many sites use (WordPress, Next.js, Cloudinary, imgix, Google), whatever site they're on. A site's `larger` rules are pairs of a regular expression and its replacement: when the expression matches an image's address, the address with the replacement put in is a larger version, tried first. Its `gallery` function, if it has one, finds the images of the post an image is in. A new site's file goes in the manifest's content scripts, between `helpers.js` and `content.js` (a test checks), and its rules get tests in `test/sites.test.mjs`.
 
 ## Releasing
 

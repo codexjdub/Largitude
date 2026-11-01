@@ -23,8 +23,9 @@ The mouse wheel moves through a gallery the way it scrolls the page: scrolling d
 ## What it shows
 
 - **On any site**, the largest version the page offers: the image file a thumbnail links to, the biggest of the sizes the page lists, or the image itself.
-- **On Reddit and X**, the original upload, rather than the smaller copy the page shows. A Reddit gallery or an X post with several photos opens as a gallery, with a counter showing where you are.
-- **Videos**: links to video files, Imgur GIFVs, X GIFs and small videos playing on a page. They play muted and looping, with a bar showing how far they've played.
+- **On sites it knows**, the original upload, rather than the smaller copy the page shows: Reddit, X, Bluesky, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr (at 1024 px, the largest it can find there). Also on any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google (Blogger, Google Play, YouTube profile pictures).
+- **Galleries**: a Reddit gallery, an X post with several photos or a Bluesky post with several images opens as a gallery, with a counter showing where you are.
+- **Videos**: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs and small videos playing on a page. They play muted and looping, with a bar showing how far they've played.
 
 It stays out of the way: the mouse goes right through the popup, it leaves alone images already shown at full size and small icons, and scrolling closes it. Keys you type into a text box go to the text box.
 
@@ -40,14 +41,14 @@ Changes apply at once, on pages already open too.
 ## Limits
 
 - Videos a site streams can't be shown: YouTube's, X's videos (its GIFs work), Reddit's, and most news sites' players.
-- Original uploads and galleries are only known on Reddit and X so far. Elsewhere, Largitude shows the largest version the page itself offers.
+- On sites it doesn't know, Largitude shows the largest version the page itself offers, which may be smaller than the original.
 - An image in a small embedded frame has little room for a popup, since the popup stays inside the frame.
 
 Coming next: YouTube, Reddit video, and more image hosts.
 
 ## Privacy and permissions
 
-Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them from the same service.
+Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those.
 
 Firefox asks for two permissions when you install it:
 

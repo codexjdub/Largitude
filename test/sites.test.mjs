@@ -96,6 +96,172 @@ test('Imgur: a GIFV is its MP4', () => {
   assert.deepEqual(plain(fullSizeUrls('https://example.com/AbC123x.gifv')), []);
 });
 
+test('Image services: WordPress copies lead to the upload', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://example.com/wp-content/uploads/2026/10/photo-300x200.jpg'), [
+    'https://example.com/wp-content/uploads/2026/10/photo.jpg',
+  ]);
+  assert.deepEqual(larger('https://techcrunch.com/wp-content/uploads/2025/06/GettyImages-2217198328.jpeg?w=668'), [
+    'https://techcrunch.com/wp-content/uploads/2025/06/GettyImages-2217198328.jpeg',
+  ]);
+  assert.deepEqual(larger('https://example.com/blog/wp-content/uploads/a-1024x768.PNG?resize=604%2C453'), [
+    'https://example.com/blog/wp-content/uploads/a.PNG',
+  ]);
+  assert.deepEqual(larger('https://someone.files.wordpress.com/2024/05/cat.jpg?w=300&h=200'), [
+    'https://someone.files.wordpress.com/2024/05/cat.jpg',
+  ]);
+  assert.deepEqual(larger('https://i0.wp.com/ma.tt/files/2026/10/MCM_0869-1024x683.jpg?resize=604%2C403&quality=89&ssl=1'), [
+    'https://ma.tt/files/2026/10/MCM_0869.jpg',
+  ]);
+  assert.deepEqual(larger('https://i2.wp.com/wordpress.org/news/files/2024/01/featured.jpg?w=1920&ssl=1'), [
+    'https://wordpress.org/news/files/2024/01/featured.jpg',
+  ]);
+  assert.deepEqual(larger('https://example.com/wp-content/uploads/2026/10/photo.jpg'), []);
+  // Not WordPress, though the name looks like a copy's.
+  assert.deepEqual(larger('https://example.com/images/wallpaper-1920x1080.jpg'), []);
+});
+
+test('Image services: Next.js, Cloudinary and imgix copies lead to the image they were made from', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://nextjs.org/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Fsonos.1zcq.png&w=750&q=75'), [
+    'https://nextjs.org/_next/static/media/sonos.1zcq.png',
+  ]);
+  assert.deepEqual(larger('https://example.com/shop/_next/image?w=640&url=https%3A%2F%2Fcdn.example.net%2Fa.jpg&q=75'), [
+    'https://cdn.example.net/a.jpg',
+  ]);
+  assert.deepEqual(larger('https://example.com/_next/image?url=javascript%3Aalert(1)&w=640'), []);
+  assert.deepEqual(larger('https://res.cloudinary.com/demo/image/upload/w_300,c_scale/sample.jpg'), [
+    'https://res.cloudinary.com/demo/image/upload/sample.jpg',
+  ]);
+  assert.deepEqual(larger('https://res.cloudinary.com/demo/image/upload/c_thumb,w_200,g_face/r_max/v1/people/sample.jpg'), [
+    'https://res.cloudinary.com/demo/image/upload/v1/people/sample.jpg',
+  ]);
+  assert.deepEqual(larger('https://res.cloudinary.com/demo/image/fetch/w_300/https://example.com/a.jpg'), [
+    'https://res.cloudinary.com/demo/image/fetch/https://example.com/a.jpg',
+  ]);
+  // A folder whose name only looks like a step.
+  assert.deepEqual(larger('https://res.cloudinary.com/demo/image/upload/my_photos/sample.jpg'), []);
+  assert.deepEqual(larger('https://res.cloudinary.com/demo/image/upload/v1/sample.jpg'), []);
+  assert.deepEqual(larger('https://assets.imgix.net/hp/snowshoe.jpg?w=300&auto=format'), ['https://assets.imgix.net/hp/snowshoe.jpg']);
+  assert.deepEqual(larger('https://assets.imgix.net/hp/snowshoe.jpg'), []);
+});
+
+test('Image services: Google images at their original size', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://play-lh.googleusercontent.com/jQAmlGUkuJGc=w240-h480-rw'), [
+    'https://play-lh.googleusercontent.com/jQAmlGUkuJGc=s0',
+  ]);
+  assert.deepEqual(larger('https://yt3.ggpht.com/ytc/AIdro_k=s88-c-k-c0x00ffffff-no-rj'), ['https://yt3.ggpht.com/ytc/AIdro_k=s0']);
+  assert.deepEqual(larger('https://lh3.googleusercontent.com/a/ACg8ocK=s96-c'), ['https://lh3.googleusercontent.com/a/ACg8ocK=s0']);
+  assert.deepEqual(larger('https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh/s320/photo.jpg'), [
+    'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh/s0/photo.jpg',
+  ]);
+  assert.deepEqual(larger('https://1.bp.blogspot.com/-abc/XyZ/AAAA/def/w640-h400/photo.png'), [
+    'https://1.bp.blogspot.com/-abc/XyZ/AAAA/def/s0/photo.png',
+  ]);
+  assert.deepEqual(larger('https://lh3.googleusercontent.com/a/ACg8ocK=s0'), []);
+  assert.deepEqual(larger('https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh/s0/photo.jpg'), []);
+});
+
+test('Amazon and IMDb: product photos and posters as uploaded', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://m.media-amazon.com/images/I/71DQp57-ltL._AC_UY654_FMwebp_QL65_.jpg'), [
+    'https://m.media-amazon.com/images/I/71DQp57-ltL.jpg',
+  ]);
+  assert.deepEqual(larger('https://m.media-amazon.com/images/I/411PvYeI6VL._AC_SR250,250_QL65_.jpg'), [
+    'https://m.media-amazon.com/images/I/411PvYeI6VL.jpg',
+  ]);
+  assert.deepEqual(larger('https://m.media-amazon.com/images/M/MV5BMDAyY2FhYjctNDc5OS00@._V1_QL75_UX90_CR0,1,90,133_.jpg'), [
+    'https://m.media-amazon.com/images/M/MV5BMDAyY2FhYjctNDc5OS00@.jpg',
+  ]);
+  assert.deepEqual(larger('https://images-na.ssl-images-amazon.com/images/I/51abc._SX300_.jpg'), [
+    'https://images-na.ssl-images-amazon.com/images/I/51abc.jpg',
+  ]);
+  assert.deepEqual(larger('https://m.media-amazon.com/images/I/71DQp57-ltL.jpg'), []);
+  // The site's own pictures (G/) only carry a version number.
+  assert.deepEqual(larger('https://m.media-amazon.com/images/G/01/gno/sprites/nav-sprite._CB779528203_.png'), []);
+});
+
+test('Wikipedia: the original file behind a thumbnail', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(
+    larger(
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Red_fox_%28cropped%29.jpg/250px-Red_fox_%28cropped%29.jpg?utm_source=en.wikipedia.org&utm_campaign=parser',
+    ),
+    ['https://upload.wikimedia.org/wikipedia/commons/d/d2/Red_fox_%28cropped%29.jpg'],
+  );
+  assert.deepEqual(larger('https://upload.wikimedia.org/wikipedia/en/thumb/9/94/Symbol_support_vote.svg/20px-Symbol_support_vote.svg.png'), [
+    'https://upload.wikimedia.org/wikipedia/en/9/94/Symbol_support_vote.svg',
+  ]);
+  // Originals that aren't images.
+  assert.deepEqual(larger('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Report.pdf/page1-220px-Report.pdf.jpg'), []);
+  assert.deepEqual(larger('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Kits.webm/220px--Kits.webm.jpg'), []);
+  assert.deepEqual(larger('https://upload.wikimedia.org/wikipedia/commons/d/d2/Red_fox.jpg'), []);
+});
+
+test('Bluesky: images and profile pictures as uploaded', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:wzt3ejirk3rvz6t5f5plxt3x/bafkreidoghorjyam'), [
+    'https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wzt3ejirk3rvz6t5f5plxt3x/bafkreidoghorjyam',
+  ]);
+  assert.deepEqual(larger('https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:abc/bafkreiabc@jpeg'), [
+    'https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:abc/bafkreiabc@jpeg',
+  ]);
+  assert.deepEqual(larger('https://cdn.bsky.app/img/avatar_thumbnail/plain/did:plc:abc/bafkreiabc'), [
+    'https://cdn.bsky.app/img/avatar/plain/did:plc:abc/bafkreiabc',
+  ]);
+  assert.deepEqual(larger('https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:abc/bafkreiabc'), []);
+});
+
+test('Pinterest: the original, then the largest copy', () => {
+  assert.deepEqual(plain(fullSizeUrls('https://i.pinimg.com/236x/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg')), [
+    'https://i.pinimg.com/originals/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg',
+    'https://i.pinimg.com/1200x/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg',
+  ]);
+  assert.deepEqual(plain(fullSizeUrls('https://i.pinimg.com/1200x/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg')), [
+    'https://i.pinimg.com/originals/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg',
+  ]);
+  assert.deepEqual(plain(fullSizeUrls('https://i.pinimg.com/originals/ea/66/54/ea6654a812e58540250060ffc84c43e7.jpg')), []);
+});
+
+test('Flickr: photos at 1024 px', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://live.staticflickr.com/65535/55619969470_98f4184b1c_w.jpg'), [
+    'https://live.staticflickr.com/65535/55619969470_98f4184b1c_b.jpg',
+  ]);
+  assert.deepEqual(larger('https://live.staticflickr.com/65535/55619969470_98f4184b1c.jpg'), [
+    'https://live.staticflickr.com/65535/55619969470_98f4184b1c_b.jpg',
+  ]);
+  assert.deepEqual(larger('https://farm5.staticflickr.com/4567/12345678_abcdef1234_m.jpg'), [
+    'https://farm5.staticflickr.com/4567/12345678_abcdef1234_b.jpg',
+  ]);
+  // Already 1024 px, or larger.
+  assert.deepEqual(larger('https://live.staticflickr.com/65535/55619969470_98f4184b1c_b.jpg'), []);
+  assert.deepEqual(larger('https://live.staticflickr.com/65535/55619969470_0fedcba987_k.jpg'), []);
+});
+
+test('eBay: listing photos at their largest', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://i.ebayimg.com/images/g/R6YAAeSwyhVq5pks/s-l500.webp'), [
+    'https://i.ebayimg.com/images/g/R6YAAeSwyhVq5pks/s-l1600.webp',
+  ]);
+  assert.deepEqual(larger('https://i.ebayimg.com/thumbs/images/g/R6YAAeSwyhVq5pks/s-l225.jpg'), [
+    'https://i.ebayimg.com/images/g/R6YAAeSwyhVq5pks/s-l1600.jpg',
+  ]);
+  assert.deepEqual(larger('https://i.ebayimg.com/images/g/R6YAAeSwyhVq5pks/s-l1600.webp'), []);
+});
+
+test("Giphy: a GIF's copy or still leads to its video", () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/DCZb48uIFPQEWXVC0w/200w.webp'), [
+    'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/DCZb48uIFPQEWXVC0w/giphy.mp4',
+  ]);
+  assert.deepEqual(larger('https://media.giphy.com/media/MsJO9AUbrLWy4/200w_s.gif'), ['https://media.giphy.com/media/MsJO9AUbrLWy4/giphy.mp4']);
+  assert.deepEqual(larger('https://media.giphy.com/media/MsJO9AUbrLWy4/giphy_s.gif'), ['https://media.giphy.com/media/MsJO9AUbrLWy4/giphy.mp4']);
+  assert.deepEqual(larger('https://media.giphy.com/media/MsJO9AUbrLWy4/giphy.gif'), []);
+  assert.deepEqual(larger('https://media.giphy.com/media/MsJO9AUbrLWy4/giphy.webp'), []);
+});
+
 test('other sites are left alone', () => {
   assert.deepEqual(plain(fullSizeUrls('https://example.com/photo.jpg?name=small')), []);
   assert.deepEqual(plain(fullSizeUrls('not a url')), []);

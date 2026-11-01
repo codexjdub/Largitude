@@ -40,6 +40,7 @@
   .photos { display: grid; grid-template-columns: repeat(3, 70px); gap: 4px; }
   .photos img { display: block; width: 70px; height: 70px; object-fit: cover; }
   .quoted img { display: block; width: 60px; height: 40px; object-fit: cover; margin-top: 6px; }
+  .photos button, .quoted button { display: block; padding: 0; border: 0; background: none; }
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); }
   dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   ol li { margin: 4px 0; }
@@ -180,6 +181,23 @@
         <a class="quoted" href="/v/status/7/photo/1"><img src="images/full-1600x1200.svg" alt="Quoted photo"></a>
       </article>
       <p class="expect">Hovering the middle photo shows gallery 2 of 3 as "2 / 3"</p>
+    </section>
+
+    <section class="case" data-gallery="gallery-1.svg gallery-2.svg gallery-3.svg" data-start="3">
+      <h2>Bluesky post with images</h2>
+      <p>Three images in one post, each a button, then a quoted post's image and a link card's, which aren't among them.</p>
+      <div data-testid="feedItem-by-someone.bsky.social" role="link">
+        <div class="photos">
+          <button type="button" aria-label="Image 1"><img src="images/gallery-1.svg" alt=""></button>
+          <button type="button" aria-label="Image 2"><img src="images/gallery-2.svg" alt=""></button>
+          <button type="button" aria-label="Image 3"><img class="target" src="images/gallery-3.svg" alt=""></button>
+        </div>
+        <div class="quoted" role="link" aria-label="Post by someone else">
+          <button type="button"><img src="images/full-1600x1200.svg" alt="Quoted image"></button>
+        </div>
+        <a class="quoted" role="link" href="https://example.com/"><img src="images/thumb-200x150.svg" alt="Link card"></a>
+      </div>
+      <p class="expect">Hovering the last image shows gallery 3 of 3 as "3 / 3"</p>
     </section>
 
     <section class="case" data-expect="clip-640x360.webm" data-video>
