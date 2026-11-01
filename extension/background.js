@@ -6,12 +6,12 @@
 
 async function settingsFor(sender) {
   const { options } = await browser.storage.local.get('options');
-  const { excluded, reverseWheel } = { ...DEFAULT_OPTIONS, ...options };
+  const { excluded, galleryWheelReversed } = { ...DEFAULT_OPTIONS, ...options };
   return {
     // The tab's page counts as well as the frame's own address, so a frame embedded on a site to leave alone is
     // left alone too.
     excluded: [sender.tab && sender.tab.url, sender.url].some((url) => !!url && isExcluded(excluded, url)),
-    reverseWheel: !!reverseWheel,
+    reverseWheel: !!galleryWheelReversed,
   };
 }
 

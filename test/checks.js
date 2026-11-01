@@ -3,8 +3,8 @@
 (() => {
   const DELAY = 300; // Largitude's hover delay, in content.js
   const WHEEL_SETTLE = 150; // its pause that ends a wheel gesture
-  // The wheel turned for the next image: fingers down, which on a Mac with natural scrolling scrolls the page up.
-  const NEXT = /^Mac/.test(navigator.platform) ? -120 : 120;
+  // The wheel turned for the next image: the way that scrolls the page down.
+  const NEXT = 120;
   const REVERSED = 'if "Reverse the mouse wheel in galleries" is on in Largitude\'s settings, turn it off for the checks';
   const standalone = new URLSearchParams(location.search).has('standalone');
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -126,13 +126,13 @@
       const kept = wheel(NEXT);
       const moved = kept && (await until(() => showing(i), 2000));
       const why = kept ? describe() : `the page got the wheel (${REVERSED})`;
-      report(moved, `${name}: fingers down move on to ${label(i)} without scrolling the page`, why);
+      report(moved, `${name}: scrolling down moves on to ${label(i)} without scrolling the page`, why);
     }
     await wait(WHEEL_SETTLE + 100);
     report(!wheel(NEXT) && showing(last), `${name}: past the last image, the wheel is left to the page`, describe());
     await wait(WHEEL_SETTLE + 100);
     wheel(-NEXT);
-    report(await until(() => showing(last - 1), 2000), `${name}: fingers up move back to ${label(last - 1)}`, describe());
+    report(await until(() => showing(last - 1), 2000), `${name}: scrolling up moves back to ${label(last - 1)}`, describe());
     await away(document);
   }
 
@@ -156,6 +156,29 @@
     const reached = pressReaches('s');
     const noted = await until(() => /save/i.test(popupIn(document).note || ''), 1000);
     report(!reached && noted, 'S saves, without reaching the page, and the popup says how it went', reached ? 'the page got the key' : 'no note showed');
+    await away(document);
+  }
+
+  // A key typed in a web component's text box goes to the box, even with a gallery's popup open: the page sees the
+  // key as coming from the component, so Largitude has to look for the focus inside it.
+  async function checkTypingInComponent() {
+    const card = document.querySelector('.case[data-gallery]');
+    const box = document.querySelector('text-host').shadowRoot.querySelector('textarea');
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    const before = await until(() => popupIn(document).counter, 3000);
+    box.focus({ preventScroll: true });
+    let reached = false;
+    const listener = () => (reached = true);
+    box.addEventListener('keydown', listener);
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true });
+    box.dispatchEvent(event);
+    box.removeEventListener('keydown', listener);
+    const after = popupIn(document).counter;
+    box.blur();
+    const kept = reached && !event.defaultPrevented && after === before;
+    const why = !before ? 'no gallery showed' : `the box got the key ${reached}, kept from it ${event.defaultPrevented}, gallery at ${after}`;
+    report(!!before && kept, 'a key typed in a web component\'s text box goes to the box, not the popup', why);
     await away(document);
   }
 
@@ -279,6 +302,7 @@
     for (const card of document.querySelectorAll('.case')) await checkCard(card);
     for (const card of document.querySelectorAll('.case[data-video]')) await checkVideo(card);
     await checkBehavior();
+    await checkTypingInComponent();
     if (standalone) await checkSaveKey();
     const failed = lines.filter((line) => !line.ok).length;
     const summary = document.createElement('div');

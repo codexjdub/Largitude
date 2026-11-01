@@ -14,14 +14,14 @@ async function load() {
   const { options } = await browser.storage.local.get('options');
   const values = { ...DEFAULT_OPTIONS, ...options };
   field('excluded').value = values.excluded;
-  field('reverseWheel').checked = values.reverseWheel;
+  field('galleryWheelReversed').checked = values.galleryWheelReversed;
 }
 
 async function save() {
   await browser.storage.local.set({
     options: {
       excluded: field('excluded').value,
-      reverseWheel: field('reverseWheel').checked,
+      galleryWheelReversed: field('galleryWheelReversed').checked,
     },
   });
   show('Saved.');

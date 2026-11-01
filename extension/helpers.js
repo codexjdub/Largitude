@@ -164,6 +164,23 @@ function fileNameFor(url) {
     .slice(-120);
 }
 
+// ---- The page ----
+
+// The opacity of a color as getComputedStyle gives it, from 0 to 1: rgb() and rgba(), and the newer syntaxes the
+// browser keeps as written, such as oklch(0.98 0 0 / 0.5) or color(display-p3 1 1 1 / 50%). Anything else, such
+// as transparent, counts as see-through.
+function colorAlpha(color) {
+  const match = /^[a-z-]+\(([^()]*)\)$/i.exec(String(color || '').trim());
+  if (!match) return 0;
+  const parts = match[1].split(',');
+  let alpha = '1';
+  if (match[1].indexOf('/') !== -1) alpha = match[1].split('/')[1];
+  else if (parts.length === 4) alpha = parts[3];
+  alpha = alpha.trim();
+  const value = parseFloat(alpha) / (alpha.endsWith('%') ? 100 : 1);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
 // ---- The popup ----
 
 // Where the popup goes, for an image of `natural` size with the pointer at `pointer` in a window of `view` size.

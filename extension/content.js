@@ -20,15 +20,12 @@
   const WHEEL_STEP = 40; // px of wheel movement that moves to the next image in a gallery
   const WHEEL_SETTLE = 150; // ms without wheel movement that ends a gesture, which moves one image at most
   const SHOWABLE_TYPES = /^image\/(?:jpeg|png|gif|webp|avif|bmp|svg\+xml)$/i;
-  // Wheel events say which way the page would scroll, not which way the fingers moved. macOS reverses the two
-  // with natural scrolling, its default, which pages can't detect; elsewhere they agree.
-  const NATURAL_SCROLLING = /^Mac/.test(navigator.platform);
 
   let enabled = false;
   let reverseWheel = false; // the "Reverse the mouse wheel in galleries" setting
   let pointer = { x: 0, y: 0 };
   let frame = 0; // the animation frame that will look under the pointer
-  let hovered = null; // the image or video under the pointer: { el, thumb, thumbSize, urls, shownSize }
+  let hovered = null; // the image or video under the pointer: { el, thumb, thumbSize, urls, videos, shownSize }
   let dismissed = null; // an element whose popup was closed (click, Escape, nothing to show), until the pointer leaves it
   let timer = 0;
   let spinnerTimer = 0;
@@ -95,19 +92,20 @@
     const rect = el.getBoundingClientRect();
     if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) return null;
     let found = null;
-    if (el.localName === 'video') {
-      found = videoSourcesOf(el);
-      if (!found) return null;
-    } else {
-      if (el.localName === 'img') {
-        found = sourcesOf(el);
-      } else {
-        const background = backgroundOf(el);
-        found = { thumb: background, thumbSize: null, urls: withRules([linkedMedia(el), background]) };
-      }
-      if (!/^(?:https?|data|blob):/i.test(found.thumb)) return null;
-    }
-    return { ...found, el, shownSize: { width: rect.width, height: rect.height } };
+    if (el.localName === 'video') found = videoSourcesOf(el);
+    else if (el.localName === 'img') found = loadable(sourcesOf(el));
+    else found = loadable(backgroundSourcesOf(el));
+    return found && { ...found, el, shownSize: { width: rect.width, height: rect.height } };
+  }
+
+  // `found`, if the image the page shows is at an address an image can load from.
+  const loadable = (found) => (found && /^(?:https?|data|blob):/i.test(found.thumb) ? found : null);
+
+  // A CSS background image, after a link around the element to an image or video file.
+  function backgroundSourcesOf(el) {
+    const background = backgroundOf(el);
+    if (!background) return null;
+    return { thumb: background, thumbSize: null, urls: withRules([linkedMedia(el), background]) };
   }
 
   // The addresses to try for an <img>'s full size, best first: a link around it to an image file, the largest
@@ -124,18 +122,14 @@
     };
   }
 
-  // A video the page plays from a file, which the popup plays again, bigger, with the page's poster standing in
-  // until it starts. A streaming player's video has a blob: address, put together piece by piece, which can't be
-  // played anywhere else, so it's left alone.
+  // A video the page plays from a file, which the popup plays again, bigger, with the page's poster as its own
+  // until it starts. The file is a video whatever its address looks like (`videos`). A streaming player's video
+  // has a blob: address, put together piece by piece, which can't be played anywhere else, so it's left alone.
   function videoSourcesOf(video) {
     const source = video.querySelector('source[src]');
     const src = video.currentSrc || video.src || (source ? source.src : '');
     if (!/^https?:/i.test(src)) return null;
-    return {
-      thumb: video.poster || '',
-      thumbSize: video.videoWidth > 0 ? { width: video.videoWidth, height: video.videoHeight } : null,
-      urls: withRules([src]),
-    };
+    return { thumb: video.poster || '', thumbSize: null, urls: withRules([src]), videos: [src] };
   }
 
   // Each address preceded by any larger version the site rules know of, without repeats.
@@ -143,12 +137,27 @@
     const urls = [];
     addresses.forEach((address) => {
       if (!address) return;
-      fullSizeUrls(address)
+      largerVersions(address)
         .concat(address)
         .forEach((url) => {
           if (urls.indexOf(url) === -1) urls.push(url);
         });
     });
+    return urls;
+  }
+
+  // The site rules' larger versions of an address. The same few addresses come up on every frame the mouse moves
+  // over an image, so the answers are kept, for a few hundred addresses at most. The rules are for http(s)
+  // addresses only, which also keeps long data: addresses out.
+  const rulesCache = new Map();
+  function largerVersions(url) {
+    if (!/^https?:/i.test(url)) return [];
+    let urls = rulesCache.get(url);
+    if (!urls) {
+      if (rulesCache.size >= 500) rulesCache.clear();
+      urls = fullSizeUrls(url);
+      rulesCache.set(url, urls);
+    }
     return urls;
   }
 
@@ -197,10 +206,7 @@
   }
 
   function isOpaque(el) {
-    const match = /rgba?\(([^)]*)\)/.exec(getComputedStyle(el).backgroundColor || '');
-    if (!match) return false;
-    const channels = match[1].split(/[\s,/]+/).filter(Boolean);
-    return channels.length < 4 || parseFloat(channels[3]) > 0.5;
+    return colorAlpha(getComputedStyle(el).backgroundColor) > 0.5;
   }
 
   function imageInside(el, x, y) {
@@ -251,7 +257,7 @@
 
   // Whether a link leads to an image or video file, or to one the site rules know, such as Imgur's GIFV pages.
   function isMediaLink(url) {
-    return isImageFileUrl(url) || isVideoFileUrl(url) || fullSizeUrls(url).length > 0;
+    return isImageFileUrl(url) || isVideoFileUrl(url) || largerVersions(url).length > 0;
   }
 
   function viewport() {
@@ -282,7 +288,7 @@
   let spinner = null;
   let counter = null;
   let progress = null;
-  let progressFrame = 0;
+  let progressDone = 0; // the share of the video the bar last showed as played
   let toast = null;
   let toastTimer = 0;
 
@@ -436,15 +442,17 @@
     spinnerTimer = 0;
     if (!host) createHost();
     spinner.style.display = 'none';
-    // The thumbnail, already loaded, stands in while the full image arrives over it, or until the video's first
-    // frame, if it's the same shape.
-    if (item.thumb && item.thumb !== media.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(media))) {
+    // The thumbnail, already loaded, stands in while the full image arrives over it, if it's the same shape. A
+    // video shows it as its poster until the first frame, which keeps the thumbnail's own shape.
+    const video = isVideo(media);
+    if (!video && item.thumb && item.thumb !== media.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(media))) {
       thumbImg.src = item.thumb;
       thumbImg.style.display = 'block';
     } else {
       thumbImg.removeAttribute('src');
       thumbImg.style.display = 'none';
     }
+    if (video && item.thumb) media.poster = item.thumb;
     if (full !== media) {
       if (full) {
         full.remove();
@@ -460,22 +468,26 @@
     placeHost(box);
     shown = true;
     listenToWheel(!!gallery);
-    if (isVideo(media)) play(media, item.el);
+    // The progress bar starts afresh for a video, and goes for an image.
+    progressDone = 0;
+    showProgress();
+    if (video) play(media, item.el);
   }
 
   const isVideo = (media) => !!media && media.localName === 'video';
   const sizeOf = (media) =>
     isVideo(media) ? { width: media.videoWidth, height: media.videoHeight } : { width: media.naturalWidth, height: media.naturalHeight };
+  const hasSize = (media) => sizeOf(media).width > 0 && sizeOf(media).height > 0;
   const sameShape = (a, b) => Math.abs(a.width / a.height - b.width / b.height) <= 0.03 * (b.width / b.height);
+  // Whether `url`, one of `item`'s addresses, is a video: a video file by its name, or what a page's video plays.
+  const isVideoAddress = (item, url) => isVideoFileUrl(url) || (!!item.videos && item.videos.indexOf(url) !== -1);
 
-  // Starts the popup's video, from where the page's own is when it's that video, and the bar showing its progress.
+  // Starts the popup's video, from where the page's own is when it's that video.
   function play(video, pageVideo) {
     if (isVideo(pageVideo) && pageVideo.currentTime > 0 && (pageVideo.currentSrc || pageVideo.src) === video.src) {
       video.currentTime = pageVideo.currentTime;
     }
     resume(video, 'Autoplay is off on this site: Space plays');
-    cancelAnimationFrame(progressFrame);
-    trackProgress();
   }
 
   // Plays `video`, with a note if Firefox doesn't allow it: muted videos play on their own unless autoplay is
@@ -489,18 +501,20 @@
     }
   }
 
-  function trackProgress() {
-    progressFrame = 0;
+  // The bar showing how far the popup's video has played, moved by the video's own events: a few times a second,
+  // smoothed by a short transition, and straight back to the start when it loops. A video still loading, or one
+  // that never says how long it is, has no progress to show.
+  function showProgress() {
     if (!shown || !isVideo(full)) {
       progress.style.display = 'none';
       return;
     }
-    // A video still loading, or one that never says how long it is, has no progress to show.
     const length = full.duration;
-    const done = length > 0 && length < Infinity ? full.currentTime / length : 0;
-    progress.style.width = Math.min(100, done * 100) + '%';
+    const done = length > 0 && length < Infinity ? Math.min(1, full.currentTime / length) : 0;
+    progress.style.transition = done < progressDone ? 'none' : 'width 0.25s linear';
+    progressDone = done;
+    progress.style.width = done * 100 + '%';
     progress.style.display = done > 0 ? 'block' : 'none';
-    progressFrame = requestAnimationFrame(trackProgress);
   }
 
   // Stops `media` loading: dropping its address stops an image's download, and a video's once it's told to load
@@ -517,8 +531,7 @@
     clearTimeout(timer);
     clearTimeout(spinnerTimer);
     cancelAnimationFrame(sizeFrame);
-    cancelAnimationFrame(progressFrame);
-    timer = spinnerTimer = sizeFrame = progressFrame = 0;
+    timer = spinnerTimer = sizeFrame = 0;
     // Releasing stops the download; the handlers below ignore an image or video that's no longer `loading`.
     const old = loading;
     loading = null;
@@ -555,43 +568,44 @@
 
   // ---- Loading ----
 
-  // Loads the first of `urls` that works, as an <img>, or a <video> for a video file, and calls `done` with it as
-  // soon as its size is known, long before it has finished loading, so the popup opens at its final size and the
-  // image fills in. `done` gets null when none works. Starting another load cancels this one.
-  function fetchMedia(urls, done, index = 0) {
+  // Loads the first of `item`'s addresses that works, as an <img>, or a <video> for a video, and calls `done`
+  // with it as soon as its size is known, long before it has finished loading, so the popup opens at its final
+  // size and the image fills in. `done` gets null when none works. Starting another load cancels this one.
+  function fetchMedia(item, done, index = 0) {
     if (loading && loading !== full) release(loading);
     loading = null;
-    if (index >= urls.length) {
+    if (index >= item.urls.length) {
       done(null);
       return;
     }
-    const video = isVideoFileUrl(urls[index]);
+    const url = item.urls[index];
+    const video = isVideoAddress(item, url);
     const media = video ? makeVideo() : make('img');
     loading = media;
     let sized = false;
     const ready = () => {
-      if (sized || loading !== media) return;
-      const size = sizeOf(media);
-      if (!(size.width > 0 && size.height > 0)) return;
+      if (sized || loading !== media || !hasSize(media)) return;
       sized = true;
       done(media);
     };
     const next = () => {
       if (loading !== media) return;
       if (sized) dismiss();
-      else fetchMedia(urls, done, index + 1);
+      else fetchMedia(item, done, index + 1);
     };
+    // Loaded without a size, it can't be shown: a sound-only video, or an SVG with no width and height of its own
+    // (which Firefox reports as 0 by 0). On to the next address then.
+    const loaded = () => (hasSize(media) ? ready() : next());
     media.addEventListener('error', next);
     cancelAnimationFrame(sizeFrame);
     if (video) {
-      // A video's size comes with its metadata; one without a picture is sound only.
-      media.addEventListener('loadedmetadata', () => (sizeOf(media).width > 0 ? ready() : next()));
-      media.src = urls[index];
+      media.addEventListener('loadedmetadata', loaded);
+      media.src = url;
       return;
     }
     media.alt = '';
-    media.addEventListener('load', ready);
-    media.src = urls[index];
+    media.addEventListener('load', loaded);
+    media.src = url;
     const poll = () => {
       sizeFrame = 0;
       ready();
@@ -600,13 +614,16 @@
     poll();
   }
 
-  // Muted, so it may play on its own, and looping, as a GIF does.
+  // Muted, so it may play on its own, and looping, as a GIF does. Its progress shows on the popup's bar.
   function makeVideo() {
     const video = make('video');
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
     video.preload = 'auto';
+    ['timeupdate', 'durationchange', 'emptied'].forEach((type) =>
+      video.addEventListener(type, () => video === full && showProgress())
+    );
     return video;
   }
 
@@ -617,7 +634,7 @@
     const target = hovered;
     if (!target) return;
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, true);
-    fetchMedia(target.urls, (media) => {
+    fetchMedia(target, (media) => {
       if (target !== hovered) return;
       const box = media && placePopup(sizeOf(media), pointer, viewport(), target.shownSize);
       if (!box || !isWorthShowing(box, target.shownSize)) {
@@ -642,7 +659,7 @@
     counter.textContent = to + 1 + ' / ' + gallery.items.length;
     clearTimeout(spinnerTimer);
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
-    fetchMedia(item.urls, (media) => {
+    fetchMedia(item, (media) => {
       if (target !== hovered || !gallery || gallery.index !== to) return;
       const box = media && placePopup(sizeOf(media), pointer, viewport());
       if (box) {
@@ -665,7 +682,7 @@
     if (!gallery) return;
     [gallery.index + 1, gallery.index - 1].forEach((index) => {
       const item = gallery.items[index];
-      if (!item || !item.urls.length || isVideoFileUrl(item.urls[0])) return;
+      if (!item || !item.urls.length || isVideoAddress(item, item.urls[0])) return;
       const img = make('img');
       img.src = item.urls[0];
       preloaded.push(img);
@@ -679,12 +696,13 @@
   let wheelLast = -Infinity;
   let wheelSpent = false;
 
-  // Moving the fingers (or the wheel) down shows the next image. One image per gesture, so a trackpad swipe and
-  // its momentum move one image, not several. Past either end, a new gesture scrolls the page as usual, which
-  // closes the popup.
+  // The wheel moves through a gallery the way it scrolls the page: the turn or swipe that would scroll the page
+  // down shows the next image, whichever way the computer's scrolling goes. One image per gesture, so a trackpad
+  // swipe and its momentum move one image, not several. Past either end, a new gesture scrolls the page as usual,
+  // which closes the popup.
   function onWheel(event) {
     if (!shown || !gallery || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-    const step = Math.sign(event.deltaY) * (NATURAL_SCROLLING ? -1 : 1) * (reverseWheel ? -1 : 1);
+    const step = Math.sign(event.deltaY) * (reverseWheel ? -1 : 1);
     if (!step) return;
     if (event.timeStamp - wheelLast > WHEEL_SETTLE) {
       wheelTotal = 0;
@@ -711,8 +729,18 @@
     else window.removeEventListener('wheel', onWheel, { capture: true });
   }
 
-  const isTyping = (target) =>
-    !!target && (target.isContentEditable || /^(?:input|textarea|select)$/.test(target.localName || ''));
+  // Whether the keyboard's focus is in a text field. A key pressed in a web component's text box seems to come from
+  // the component itself, so the focus is followed into shadow roots: closed ones too, which Firefox lets
+  // extensions see.
+  function isTyping() {
+    let el = document.activeElement;
+    for (let depth = 0; el && depth < 8; depth++) {
+      const shadow = el.openOrClosedShadowRoot || el.shadowRoot;
+      if (!shadow || !shadow.activeElement) break;
+      el = shadow.activeElement;
+    }
+    return !!el && (el.isContentEditable || /^(?:input|textarea|select)$/.test(el.localName || ''));
+  }
 
   // ---- Saving ----
 
@@ -809,7 +837,7 @@
         dismiss();
         return;
       }
-      if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping(event.target)) return;
+      if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping()) return;
       const step = gallery ? { ArrowRight: 1, ArrowLeft: -1 }[event.key] : 0;
       const key = event.key.toLowerCase();
       const video = isVideo(full) ? full : null;

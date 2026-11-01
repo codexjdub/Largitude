@@ -17,6 +17,7 @@ const {
   addSite,
   fullSizeUrls,
   fileNameFor,
+  colorAlpha,
   placePopup,
   isWorthShowing,
 } = context;
@@ -149,6 +150,22 @@ test('fileNameFor leaves the name to Firefox when the address has none, and clea
   const long = fileNameFor('https://example.com/' + 'x'.repeat(300) + '.png');
   assert.equal(long.length, 120);
   assert.ok(long.endsWith('.png'));
+});
+
+test('colorAlpha reads the opacity of the colors getComputedStyle gives', () => {
+  assert.equal(colorAlpha('rgb(255, 255, 255)'), 1);
+  assert.equal(colorAlpha('rgba(0, 0, 0, 0)'), 0);
+  assert.equal(colorAlpha('rgba(0, 0, 0, 0.3)'), 0.3);
+  assert.equal(colorAlpha('rgb(1 2 3 / 25%)'), 0.25);
+  // Newer syntaxes, which the browser doesn't turn into rgb().
+  assert.equal(colorAlpha('oklch(0.98 0 0)'), 1);
+  assert.equal(colorAlpha('oklch(0.98 0 0 / 0.4)'), 0.4);
+  assert.equal(colorAlpha('color(display-p3 1 1 1)'), 1);
+  assert.equal(colorAlpha('color(srgb 0.5 0.5 0.5 / 50%)'), 0.5);
+  assert.equal(colorAlpha('lab(50 20 30 / none)'), 0);
+  assert.equal(colorAlpha('transparent'), 0);
+  assert.equal(colorAlpha(''), 0);
+  assert.equal(colorAlpha(undefined), 0);
 });
 
 const view = { width: 1200, height: 800 };

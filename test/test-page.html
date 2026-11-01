@@ -29,6 +29,7 @@
   .overlay { position: absolute; inset: 0; }
   .dim { background: rgba(0, 0, 0, 0.3); }
   .cover { background: var(--card); display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); }
+  .modern { background: oklch(97% 0.01 250); border: 1px dashed var(--line); }
   .bg { width: 200px; height: 150px; background: url(images/full-1600x1200.svg) center / cover; }
   .card { background: var(--card); width: 200px; height: 150px; }
   iframe { border: 1px dashed var(--line); box-sizing: border-box; width: 100%; height: 360px; display: block; }
@@ -202,12 +203,29 @@
       <p class="expect">Shows nothing</p>
     </section>
 
+    <section class="case" data-expect="clip-no-extension">
+      <h2>Video with no file extension</h2>
+      <p>A video on the page whose address doesn't end in .mp4 or .webm, as many sites serve them.</p>
+      <video class="target" src="images/clip-no-extension" width="200" height="113" muted loop autoplay playsinline></video>
+      <p class="expect">Plays the video bigger</p>
+    </section>
+
     <section class="case" data-expect="none">
       <h2>Covered by an opaque element</h2>
       <p>A panel with a background of its own lies over an image.</p>
       <div class="stage">
         <img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image under a panel">
         <div class="overlay cover target">A panel over an image</div>
+      </div>
+      <p class="expect">Shows nothing</p>
+    </section>
+
+    <section class="case" data-expect="none">
+      <h2>Covered by a panel in a modern color</h2>
+      <p>An empty panel lies over an image, its background written in oklch(), which the browser keeps as written.</p>
+      <div class="stage">
+        <img src="images/thumb-200x150.svg" srcset="images/thumb-200x150.svg 200w, images/full-1600x1200.svg 1600w" sizes="200px" width="200" height="150" alt="Image under an empty panel">
+        <div class="overlay modern target"></div>
       </div>
       <p class="expect">Shows nothing</p>
     </section>
@@ -251,9 +269,10 @@
     <li>With a popup open, move off the image: it closes. Move back: it opens again after a moment.</li>
     <li>With a popup open, press Escape or click: it closes and stays closed until you move off the image and back.</li>
     <li>With a popup open, scroll: it closes.</li>
-    <li>On the Reddit gallery, moving your fingers (or the wheel) down shows the next image, and one swipe on a trackpad moves one image, however long its momentum lasts. At the last image, the next swipe scrolls the page and closes the popup.</li>
+    <li>On the Reddit gallery, scrolling down (the way that scrolls the page down) shows the next image, and one swipe on a trackpad moves one image, however long its momentum lasts. At the last image, the next swipe scrolls the page and closes the popup.</li>
     <li>With a popup open, press S: Firefox saves the full-size image (asking where first, if it's set to), and the popup says "Saved". With a gallery, it saves the image the popup shows at the time.</li>
-    <li>On a video card, the popup plays the video muted and looping, with a bar along the bottom showing how far it has played (none for the test video, which doesn't say how long it is). M says "No sound" (the test video has none), Space pauses and plays, and S saves the video.</li>
+    <li>On a video card, the popup plays the video muted and looping, with a bar along the bottom showing how far it has played once the browser knows how long the video is (the test video doesn't say, so the bar may not show, or only after a while). M says "No sound" (the test video has none), Space pauses and plays, and S saves the video.</li>
+    <li>Click in this text box, which is inside a web component as comment boxes often are, then hover an image and type: S, Space and the arrow keys go into the box, not to the popup. <text-host></text-host></li>
     <li>Add <code>127.0.0.1</code> under <b>Sites to leave alone</b> in Largitude's settings, then hover here again without reloading: nothing shows. Remove it, and the popups are back.</li>
   </ol>
 </main>
@@ -271,6 +290,14 @@
       }
     });
   }
+  // A text box inside a web component, whose keys seem to come from the component itself.
+  customElements.define('text-host', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      this.style.display = 'block';
+      this.attachShadow({ mode: 'open' }).innerHTML = '<textarea rows="2" cols="40" aria-label="Text box in a web component"></textarea>';
+    }
+  });
   const dialog = document.getElementById('dialog');
   document.getElementById('open-dialog').addEventListener('click', () => dialog.showModal());
   // The streaming card's video plays from a blob: address, as players that fetch a video in pieces do.
