@@ -1,5 +1,5 @@
 // Largitude's background script: gives each frame the settings that apply to it, saves the image the popup
-// shows when the user presses S, and runs the toolbar button. Later it will also fetch the pages and JSON some
+// shows when the user presses S or opens it in a tab for O, and runs the toolbar button. Later it will also fetch the pages and JSON some
 // site rules need, such as a Reddit post's, which a content script can only read from its own page's site.
 //
 // DEFAULT_OPTIONS comes from defaults.js; isExcluded, pageHostOf, listWithSite and listWithoutSite from
@@ -33,9 +33,21 @@ async function save(message, sender) {
   }
 }
 
+// O: the image or video in a new tab, right after the one it's on, in the same window.
+async function openTab(message, sender) {
+  if (typeof message.url !== 'string' || !/^https?:/i.test(message.url) || !sender.tab) return false;
+  try {
+    await browser.tabs.create({ url: message.url, index: sender.tab.index + 1, windowId: sender.tab.windowId, openerTabId: sender.tab.id });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 browser.runtime.onMessage.addListener((message, sender) => {
   if (message && message.type === 'settings') return settingsFor(sender);
   if (message && message.type === 'save') return save(message, sender);
+  if (message && message.type === 'open') return openTab(message, sender);
   return undefined;
 });
 

@@ -141,6 +141,13 @@ function hasFileType(url, extension) {
 //            takes them) is a larger version of the image
 //   gallery  optional, (el, page) → the images of the post `el` is in, when it has several: { images, index },
 //            where images[index] is `el`'s <img>; `page` has content.js's closestAcross and closestLink
+//   standIn  optional, (url, size) → whether an image that loaded from `url` at `size` ({ width, height }) is
+//            the site's stand-in for a file it doesn't have, which the popup skips like a failed load
+//   leaveAlone  optional, (url, pageUrl) → whether to leave the image or link at `url` to the site itself on the
+//            page at `pageUrl`, as on a site that shows a preview of its own
+//   video    optional, (el, page) → for a video the site streams, which can't be played anywhere else, when `el`
+//            is its <video> or the poster shown before it plays: { urls, poster }, files of the same video, best
+//            first, and its poster image's address
 // A var, like the function declarations here, so that it's a global the scripts loaded after this one see.
 var SITES = [];
 
@@ -161,6 +168,16 @@ function fullSizeUrls(url) {
     }
   }
   return urls;
+}
+
+// Whether a site rule says the image that loaded from `url` at `size` is a stand-in for a missing file.
+function isStandIn(url, size) {
+  return SITES.some((site) => !!site.standIn && site.standIn(url, size));
+}
+
+// Whether a site rule leaves the image or link at `url` to the site, on the page at `pageUrl`.
+function isLeftAlone(url, pageUrl) {
+  return SITES.some((site) => !!site.leaveAlone && site.leaveAlone(url, pageUrl));
 }
 
 // A file name to save the image at `url` under: the last part of its path, with the image's type added when the

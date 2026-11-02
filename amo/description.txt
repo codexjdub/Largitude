@@ -1,10 +1,11 @@
-Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. Videos too: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs and small videos on a page play bigger. The popup opens beside the pointer, fitted to the window, and closes when you move away.
+Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. Videos play bigger too: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs, small videos on a page, and Reddit's videos, with their sound. The popup opens beside the pointer, fitted to the window, and closes when you move away.
 
 • Finds the largest version a page offers: a link to the image file, the biggest of the sizes the page lists, or the image itself.
-• Knows where many sites keep the original uploads, so you see the full image rather than the page's smaller copy: Reddit, X, Bluesky, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr, and any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google.
+• Knows where many sites keep the original uploads, so you see the full image rather than the page's smaller copy: Reddit, X, Bluesky, Imgur, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr, and any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google.
 • Galleries: on a Reddit gallery, or an X or Bluesky post with several images, the arrow keys or the mouse wheel move through them, with a counter showing where you are.
 • Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses.
-• Press S to save the image or video the popup shows.
+• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies its address, and Z shows an image at its actual size, the mouse moving around it.
+• YouTube: a video's largest still, for its thumbnails and links to it on other sites.
 • Sees through the transparent layers many sites put over their images, and into web components.
 • Opens at its final size right away, with the thumbnail standing in while the full image loads.
 • Stays out of the way: the mouse goes right through it, it skips images already at full size and small icons, and a click, Escape or scrolling closes it.
@@ -13,4 +14,4 @@ Largitude shows the full-size version of an image when you rest the mouse on it:
 
 Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those.
 
-Coming next: YouTube, Reddit video, and more image hosts.
+Coming next: more image hosts.

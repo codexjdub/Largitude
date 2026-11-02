@@ -221,6 +221,20 @@
       <p class="expect">Shows nothing</p>
     </section>
 
+    <section class="case" data-expect="clip-640x360.webm" data-video>
+      <h2>Reddit video</h2>
+      <p>Reddit's player streams the video, and lists files of it: the largest is missing here.</p>
+      <shreddit-player class="target" data-stream></shreddit-player>
+      <p class="expect">Plays the 640×360 file, from where the page's video is</p>
+    </section>
+
+    <section class="case" data-expect="clip-640x360.webm">
+      <h2>Reddit video before it plays</h2>
+      <p>The player shows its poster until the video starts.</p>
+      <shreddit-player class="target"><img slot="poster" src="images/thumb-200x150.svg" width="200" height="113" style="object-fit: cover" alt=""></shreddit-player>
+      <p class="expect">Plays the 640×360 file</p>
+    </section>
+
     <section class="case" data-expect="clip-no-extension">
       <h2>Video with no file extension</h2>
       <p>A video on the page whose address doesn't end in .mp4 or .webm, as many sites serve them.</p>
@@ -319,9 +333,30 @@
   const dialog = document.getElementById('dialog');
   document.getElementById('open-dialog').addEventListener('click', () => dialog.showModal());
   // The streaming card's video plays from a blob: address, as players that fetch a video in pieces do.
-  fetch('images/clip-640x360.webm')
-    .then((response) => response.blob())
-    .then((blob) => (document.getElementById('streaming').src = URL.createObjectURL(blob)));
+  const streamInto = (video) =>
+    fetch('images/clip-640x360.webm')
+      .then((response) => response.blob())
+      .then((blob) => (video.src = URL.createObjectURL(blob)));
+  streamInto(document.getElementById('streaming'));
+  // Reddit's player, as far as Largitude sees it: the video streamed in its shadow root (data-stream), or its
+  // poster until it plays, and files of the video, listed in packaged-media-json with their sizes.
+  customElements.define('shreddit-player', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      const file = (name, width, height) => ({ source: { dimensions: { width, height }, url: new URL('images/' + name, location.href).href } });
+      const permutations = [file('clip-640x360.webm', 640, 360), file('missing-1280x720.mp4', 1280, 720)];
+      this.setAttribute('packaged-media-json', JSON.stringify({ playbackMp4s: { permutations } }));
+      this.setAttribute('poster', new URL('images/thumb-200x150.svg', location.href).href);
+      Object.assign(this.style, { display: 'block', width: '200px', height: '113px' });
+      const shadow = this.attachShadow({ mode: 'open' });
+      if (!this.hasAttribute('data-stream')) {
+        shadow.innerHTML = '<slot name="poster"></slot>';
+        return;
+      }
+      shadow.innerHTML = '<video width="200" height="113" muted loop autoplay playsinline></video>';
+      streamInto(shadow.querySelector('video'));
+    }
+  });
 
   // ?standalone loads Largitude's content scripts, the ones the manifest lists, into the page itself, with a
   // stand-in for the two extension APIs they use, so the cases can be tried in any browser. Closed shadow roots

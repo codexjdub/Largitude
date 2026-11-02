@@ -46,6 +46,7 @@
       counter: counter ? counter.textContent : '',
       note: note ? note.textContent : '',
       box: host.getBoundingClientRect(),
+      full,
       video: full && full.localName === 'video' ? full : null,
     };
   }
@@ -159,6 +160,55 @@
     await away(document);
   }
 
+  // O opens the image in a new tab and C copies its address. Only with ?standalone, like S: there's no
+  // background script to open a tab, so the popup says it couldn't, and the clipboard is stood in for.
+  async function checkOpenAndCopy() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    let reached = pressReaches('o');
+    const said = await until(() => /open/i.test(popupIn(document).note || ''), 1000);
+    report(!reached && said, 'O opens it in a new tab, without reaching the page', reached ? 'the page got the key' : 'no note showed');
+    let copied = '';
+    navigator.clipboard.writeText = async (text) => {
+      copied = text;
+    };
+    reached = pressReaches('c');
+    const noted = await until(() => /copied/i.test(popupIn(document).note || ''), 1000);
+    delete navigator.clipboard.writeText;
+    const why = reached ? 'the page got the key' : `copied "${copied}", note "${popupIn(document).note}"`;
+    report(!reached && noted && /full-1600x1200\.svg$/.test(copied), 'C copies the full-size address, without reaching the page', why);
+    await away(document);
+  }
+
+  // Z shows the image at its actual size, filling the window, and the mouse looks around it; Z again goes back.
+  async function checkActualSize() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    const point = await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    const fitted = popupIn(document).box;
+    const view = document.documentElement;
+    const reached = pressReaches('z');
+    let popup = popupIn(document);
+    const filled = popup.open && popup.box.left === 0 && popup.box.top === 0 && popup.box.width === view.clientWidth;
+    const actual = !!popup.full && popup.full.style.width === '1600px' && popup.full.style.height === '1200px';
+    report(!reached && filled && actual, 'Z shows the image at its actual size, filling the window', `box ${JSON.stringify(popup.box)}, image ${popup.full && popup.full.style.width}`);
+    moveTo(document, 0, 0);
+    const left = popup.full.style.left;
+    moveTo(document, view.clientWidth - 1, view.clientHeight - 1);
+    const right = popup.full.style.left;
+    popup = popupIn(document);
+    report(popup.open && left === '0px' && parseFloat(right) < -500, 'at actual size, moving the mouse looks around the image', `left ${left} then ${right}, open ${popup.open}`);
+    moveTo(document, point.x, point.y);
+    pressReaches('z');
+    popup = popupIn(document);
+    const back = popup.open && Math.round(popup.box.left) === Math.round(fitted.left) && Math.round(popup.box.width) === Math.round(fitted.width);
+    report(back, 'Z again goes back to the fitted popup', `box ${JSON.stringify(popup.box)}`);
+    await away(document);
+  }
+
   // A key typed in a web component's text box goes to the box, even with a gallery's popup open: the page sees the
   // key as coming from the component, so Largitude has to look for the focus inside it.
   async function checkTypingInComponent() {
@@ -194,6 +244,17 @@
       await away(document);
       return;
     }
+    // A video playing on the page goes on in the popup from where it is, whether the popup plays the same file
+    // or, for a streamed one, a file of it.
+    const target = card.querySelector('.target');
+    const pageVideo = target.localName === 'video' ? target : target.shadowRoot && target.shadowRoot.querySelector('video');
+    if (pageVideo) {
+      const gap = Math.abs(video.currentTime - pageVideo.currentTime);
+      const together = gap < 0.25 || Math.abs(gap - pageVideo.duration) < 0.25;
+      const times = `page at ${pageVideo.currentTime.toFixed(2)} s, popup at ${video.currentTime.toFixed(2)} s`;
+      report(together, name + ": the popup goes on from where the page's video is", times);
+    }
+
     const start = video.currentTime;
     const moving = await until(() => !video.paused && video.currentTime !== start, 2000);
     report(moving && video.muted && video.loop, name + ': the video plays, muted and looping', `paused ${video.paused}, muted ${video.muted}, loop ${video.loop}`);
@@ -315,7 +376,9 @@
     for (const card of document.querySelectorAll('.case[data-video]')) await checkVideo(card);
     await checkBehavior();
     await checkTypingInComponent();
+    await checkActualSize();
     if (standalone) await checkSaveKey();
+    if (standalone) await checkOpenAndCopy();
     const failed = lines.filter((line) => !line.ok).length;
     const summary = document.createElement('div');
     summary.className = failed ? 'fail' : 'pass';

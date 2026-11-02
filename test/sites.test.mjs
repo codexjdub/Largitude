@@ -11,7 +11,7 @@ const context = vm.createContext({ URL });
 for (const file of manifest.content_scripts[0].js.filter((file) => file !== 'content.js')) {
   vm.runInContext(readFileSync(new URL(file, extension), 'utf8'), context, { filename: file });
 }
-const { SITES, fullSizeUrls } = context;
+const { SITES, fullSizeUrls, isStandIn, isLeftAlone } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -27,7 +27,9 @@ test('each site has a name, [find, replace] rules and, optionally, a gallery', (
       assert.ok(!find.global && !find.sticky, `${site.name}: ${find}`);
       assert.ok(typeof replace === 'string' || typeof replace === 'function', `${site.name}: ${find}`);
     }
-    assert.ok(site.gallery === undefined || typeof site.gallery === 'function', site.name);
+    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video']) {
+      assert.ok(site[hook] === undefined || typeof site[hook] === 'function', `${site.name}: ${hook}`);
+    }
   }
 });
 
@@ -44,6 +46,33 @@ test('Reddit: its copies lead to the original upload', () => {
   // Link previews of other sites have no original on Reddit.
   assert.deepEqual(original('https://external-preview.redd.it/AbC.jpg?auto=webp&s=3'), []);
   assert.deepEqual(original('https://i.redd.it/abc123def.png'), []);
+});
+
+test("Reddit: a video's files, largest first, from its player", () => {
+  const reddit = SITES.find((site) => site.name === 'Reddit');
+  // A <shreddit-player> as Reddit writes it, cut down to two sizes in each codec.
+  const file = (codec, height) =>
+    `https://packaged-media.redd.it/c9hjorqb31zh1/pb/m2-${codec}res_${height}p.mp4?m=DASHPlaylist.mpd&v=1&e=1793613600&s=0bcd`;
+  const source = (codec, width, height) => ({
+    source: { bitrateBps: 1, dimensions: { height, width }, url: file(codec, height), videoCodec: codec ? 'VP9' : 'H264' },
+  });
+  const permutations = [source('vp9-', 392, 220), source('vp9-', 1280, 720), source('', 392, 220), source('', 1280, 720)];
+  const poster = 'https://external-preview.redd.it/gamer-showcases-his-flying-skills-in-gta-sa-v0-eDdvanhm.png?width=640&s=2127';
+  const player = (attributes) => ({ getAttribute: (name) => (name in attributes ? attributes[name] : null) });
+  const page = (found) => ({ closestAcross: (el, selector) => (/\bshreddit-player\b/.test(selector) ? found : null) });
+  const videoIn = (found) => plain(reddit.video({ localName: 'video' }, page(found)));
+
+  const json = JSON.stringify({ playbackMp4s: { duration: 97, permutations } });
+  assert.deepEqual(videoIn(player({ 'packaged-media-json': json, poster })), {
+    urls: [file('vp9-', 720), file('', 720), file('vp9-', 220), file('', 220)],
+    poster,
+  });
+  // Outside a player, or a player without the list or with something else in it: nothing.
+  assert.equal(reddit.video({ localName: 'video' }, page(null)), null);
+  assert.equal(videoIn(player({ poster })), null);
+  assert.equal(videoIn(player({ 'packaged-media-json': '{"playbackMp4s":' })), null);
+  const odd = [{ source: { dimensions: { width: 1, height: 1 }, url: 'javascript:alert(1)' } }, { source: null }, {}];
+  assert.equal(videoIn(player({ 'packaged-media-json': JSON.stringify({ playbackMp4s: { permutations: odd } }) })), null);
 });
 
 test('X: photos, profile pictures and banners at their original size', () => {
@@ -87,6 +116,51 @@ test("X: a GIF's still leads to its video, then to the still at its largest", ()
   assert.deepEqual(larger('https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC.jpg'), [
     'https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/AbC?format=jpg&name=orig',
   ]);
+});
+
+test('Imgur: thumbnails and links to an image lead to the original', () => {
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://i.imgur.com/gnffQGHb.jpg'), ['https://i.imgur.com/gnffQGH.jpg']);
+  assert.deepEqual(larger('https://i.imgur.com/r9OlPoCl.png'), ['https://i.imgur.com/r9OlPoC.png']);
+  assert.deepEqual(larger('https://i.imgur.com/AbCdEh.jpg'), ['https://i.imgur.com/AbCdE.jpg']);
+  // An original's own address: 5 or 7 characters, no size letter to take off.
+  assert.deepEqual(larger('https://i.imgur.com/r9OlPoC.jpg'), []);
+  assert.deepEqual(larger('https://i.imgur.com/AbCdE.jpg'), []);
+  assert.deepEqual(larger('https://imgur.com/r9OlPoC'), ['https://i.imgur.com/r9OlPoC.jpg']);
+  assert.deepEqual(larger('https://m.imgur.com/AbC12?r'), ['https://i.imgur.com/AbC12.jpg']);
+  // Imgur's own pages and albums.
+  assert.deepEqual(larger('https://imgur.com/privacy'), []);
+  assert.deepEqual(larger('https://imgur.com/gallery/uHLvLbB'), []);
+  assert.deepEqual(larger('https://imgur.com/a/uHLvLbB'), []);
+});
+
+test('YouTube: a video\'s largest still, from its thumbnails and links to it', () => {
+  const stills = (id) => ['maxresdefault', 'sddefault', 'hqdefault'].map((size) => `https://i.ytimg.com/vi/${id}/${size}.jpg`);
+  const larger = (url) => plain(fullSizeUrls(url));
+  assert.deepEqual(larger('https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'), stills('dQw4w9WgXcQ').slice(0, 2));
+  assert.deepEqual(larger('https://i9.ytimg.com/vi_webp/a-b_c1234XY/mqdefault.webp?v=1'), stills('a-b_c1234XY'));
+  assert.deepEqual(larger('https://img.youtube.com/vi/dQw4w9WgXcQ/0.jpg'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://youtu.be/dQw4w9WgXcQ?si=abc'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://m.youtube.com/shorts/dQw4w9WgXcQ'), stills('dQw4w9WgXcQ'));
+  assert.deepEqual(larger('https://www.youtube.com/@someone/videos'), []);
+  assert.deepEqual(larger('https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg'), stills('dQw4w9WgXcQ').slice(1));
+});
+
+test('YouTube: a missing still is a stand-in, and YouTube keeps its own thumbnails', () => {
+  assert.equal(isStandIn('https://i.ytimg.com/vi/jNQXAC9IVRw/maxresdefault.jpg', { width: 120, height: 90 }), true);
+  assert.equal(isStandIn('https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg', { width: 480, height: 360 }), false);
+  assert.equal(isStandIn('https://example.com/small.jpg', { width: 120, height: 90 }), false);
+  const thumbnail = 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hq720.jpg?sqp=abc&rs=def';
+  assert.equal(isLeftAlone(thumbnail, 'https://www.youtube.com/'), true);
+  assert.equal(isLeftAlone('https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://m.youtube.com/results?q=a'), true);
+  assert.equal(isLeftAlone(thumbnail, 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'), true);
+  // Profile pictures on YouTube, and YouTube's thumbnails elsewhere, are Largitude's.
+  assert.equal(isLeftAlone('https://yt3.ggpht.com/abc=s88-c-k', 'https://www.youtube.com/'), false);
+  assert.equal(isLeftAlone(thumbnail, 'https://news.example.com/article'), false);
+  assert.equal(isLeftAlone(thumbnail, 'https://notyoutube.com/'), false);
 });
 
 test('Imgur: a GIFV is its MP4', () => {

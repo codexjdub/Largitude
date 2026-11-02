@@ -38,10 +38,22 @@ createServer(async (req, res) => {
     // A link without a file extension (test/images/clip-no-extension) is served as the file it points to, as a
     // site would serve a video at such an address.
     const real = await realpath(join(root, file));
-    res.writeHead(200, {
-      'content-type': types[extname(real)] || 'application/octet-stream',
-      'cache-control': 'no-store',
-    });
+    const headers = { 'content-type': types[extname(real)] || 'application/octet-stream', 'cache-control': 'no-store', 'accept-ranges': 'bytes' };
+    // A part of the file, as a video asks for to seek: served whole, it only plays from the start.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      const size = body.length;
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start > end) {
+        res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
+        return;
+      }
+      res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${size}` });
+      res.end(body.subarray(start, end + 1));
+      return;
+    }
+    res.writeHead(200, headers);
     res.end(body);
   } catch (err) {
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
