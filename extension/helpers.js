@@ -277,6 +277,24 @@ function isWorthShowing(popup, shown) {
   return popup.width >= shown.width * 1.2 || popup.height >= shown.height * 1.2;
 }
 
+// Where the popup goes when R has turned its image `turns` quarter turns: the popup's upright `box`, turned about
+// its middle, so the image keeps its size and place. It shrinks only as much as it must to fit the window, and
+// moves only as far as it must to stay inside it, with `under` kept free below it, as for placePopup.
+function turnInPlace(box, turns, view, under = 0, margin = 8) {
+  const across = turns % 2 ? box.height : box.width;
+  const down = turns % 2 ? box.width : box.height;
+  const scale = Math.min(1, (view.width - 2 * margin) / across, (view.height - 2 * margin - under) / down);
+  const width = Math.max(1, Math.floor(across * scale));
+  const height = Math.max(1, Math.floor(down * scale));
+  const clamp = (value, low, high) => Math.round(Math.max(low, Math.min(value, high)));
+  return {
+    left: clamp(box.left + (box.width - width) / 2, margin, view.width - margin - width),
+    top: clamp(box.top + (box.height - height) / 2, margin, view.height - margin - under - height),
+    width,
+    height,
+  };
+}
+
 // The box an image or video turned `turns` quarter turns about its middle must have to cover `box` once turned:
 // the same for a half turn, or with width and height swapped for a quarter turn, on the same middle.
 function unturnedBox(box, turns) {

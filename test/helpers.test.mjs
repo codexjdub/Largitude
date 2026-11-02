@@ -24,6 +24,7 @@ const {
   placePopup,
   isWorthShowing,
   unturnedBox,
+  turnInPlace,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -309,4 +310,33 @@ test('unturnedBox swaps the sides for a quarter turn, keeping the middle', () =>
   assert.deepEqual(plain(unturnedBox(box, 0)), box);
   // At actual size, the part of the window the turned image takes: off the window's left and top.
   assert.deepEqual(plain(unturnedBox({ left: -200, top: -800, width: 1200, height: 1600 }, 1)), { left: -400, top: -600, width: 1600, height: 1200 });
+});
+
+test('turnInPlace turns the popup about its middle, keeping its size', () => {
+  const view = { width: 1200, height: 800 };
+  const box = { left: 300, top: 200, width: 400, height: 300 };
+  assert.deepEqual(plain(turnInPlace(box, 1, view)), { left: 350, top: 150, width: 300, height: 400 });
+  assert.deepEqual(plain(turnInPlace(box, 3, view)), { left: 350, top: 150, width: 300, height: 400 });
+  // A half turn, and four, leave it as it was.
+  assert.deepEqual(plain(turnInPlace(box, 2, view)), box);
+  assert.deepEqual(plain(turnInPlace(box, 0, view)), box);
+});
+
+test('turnInPlace shrinks the popup to fit the window, and moves it only to stay inside', () => {
+  const view = { width: 1200, height: 800 };
+  // Wide and filling the window's width: turned, it's too tall, so it shrinks, keeping its shape and middle.
+  const wide = { left: 8, top: 175, width: 1184, height: 450 };
+  const turned = turnInPlace(wide, 1, view);
+  assert.equal(turned.height, 784);
+  assert.ok(Math.abs(turned.width - (784 * 450) / 1184) <= 1);
+  assert.equal(turned.top, 8);
+  assert.ok(Math.abs(turned.left + turned.width / 2 - 600) <= 1);
+  // Near the window's right edge: moved left, just inside.
+  const edge = turnInPlace({ left: 1000, top: 300, width: 192, height: 300 }, 1, view);
+  assert.equal(edge.left + edge.width, 1200 - 8);
+  assert.equal(edge.width, 300);
+  assert.equal(edge.top, 354);
+  // With room kept below for the line of keys.
+  const low = turnInPlace({ left: 100, top: 500, width: 400, height: 292 }, 1, view, 32);
+  assert.ok(low.top + low.height + 32 <= 800 - 8);
 });

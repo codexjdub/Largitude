@@ -214,8 +214,8 @@
     await away(document);
   }
 
-  // R turns the image a quarter turn and the popup takes the turned shape; four turns bring it back. At actual
-  // size the mouse looks around the turned image, and Z goes back to a popup of the shape it's turned to.
+  // R turns the image a quarter turn and the popup turns in place, about its middle; four turns bring it back. At
+  // actual size the mouse looks around the turned image, and Z goes back to the popup turned in place.
   async function checkTurn() {
     const el = document.querySelector('.case .target');
     await away(document);
@@ -223,15 +223,24 @@
     await until(() => popupIn(document).open, 3000);
     const view = document.documentElement;
     const tall = (box) => Math.abs(box.height / box.width - 4 / 3) < 0.02;
-    const wide = (box) => Math.abs(box.width / box.height - 4 / 3) < 0.02;
+    const upright = popupIn(document).box;
+    const middle = (box) => [box.left + box.width / 2, box.top + box.height / 2];
+    // The same middle, unless it had to move to stay inside the window, with room for the line of keys below.
+    const sameMiddle = (box) => {
+      const [x, y] = middle(box);
+      const across = Math.abs(x - middle(upright)[0]) <= 1 || box.left === 8 || box.right === view.clientWidth - 8;
+      const down = Math.abs(y - middle(upright)[1]) <= 1 || box.top === 8 || box.bottom === view.clientHeight - 40;
+      return across && down;
+    };
+    const same = (box) => ['left', 'top', 'width', 'height'].every((side) => Math.abs(box[side] - upright[side]) < 1);
     const reached = pressReaches('r');
     let popup = popupIn(document);
     let seen = popup.full ? popup.full.getBoundingClientRect() : null;
     const covered = !!seen && Math.abs(seen.width - popup.box.width) < 1 && Math.abs(seen.height - popup.box.height) < 1;
-    report(!reached && popup.open && tall(popup.box) && covered, 'R turns the image a quarter turn, the popup taking its shape, without reaching the page', `box ${JSON.stringify(popup.box)}, image ${JSON.stringify(seen)}`);
+    report(!reached && popup.open && tall(popup.box) && sameMiddle(popup.box) && covered, 'R turns the image a quarter turn, the popup turning in place, without reaching the page', `box ${JSON.stringify(popup.box)} from ${JSON.stringify(upright)}, image ${JSON.stringify(seen)}`);
     ['r', 'r', 'r'].forEach(pressReaches);
     popup = popupIn(document);
-    report(popup.open && wide(popup.box) && popup.full.style.transform === 'none', 'four turns bring it back upright', `box ${JSON.stringify(popup.box)}, ${popup.full && popup.full.style.transform}`);
+    report(popup.open && same(popup.box) && popup.full.style.transform === 'none', 'four turns bring it back upright, where it was', `box ${JSON.stringify(popup.box)}, ${popup.full && popup.full.style.transform}`);
     pressReaches('r');
     pressReaches('z');
     moveTo(document, 0, 0);
@@ -244,7 +253,7 @@
     pressReaches('r');
     pressReaches('z');
     popup = popupIn(document);
-    report(popup.open && wide(popup.box), 'turned at actual size, Z goes back to a popup of the new shape', `box ${JSON.stringify(popup.box)}`);
+    report(popup.open && same(popup.box), 'turned again at actual size, Z goes back to the popup turned in place: a half turn, where it was', `box ${JSON.stringify(popup.box)} from ${JSON.stringify(upright)}`);
     await away(document);
   }
 

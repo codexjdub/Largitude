@@ -320,6 +320,7 @@
   let toastTimer = 0;
   let actualSize = null; // with Z, the popup's box from before it showed the image at its actual size
   let turns = 0; // the quarter turns clockwise R has given the image or video shown
+  let uprightBox = null; // the popup's box before R turned it
   let keysOpen = false;
 
   const make = (tag) => document.createElement(tag);
@@ -586,6 +587,7 @@
     spinnerTimer = 0;
     actualSize = null;
     turns = 0;
+    uprightBox = null;
     if (!host) createHost();
     spinner.style.display = 'none';
     // The thumbnail, already loaded, stands in while the full image arrives over it, if it's the same shape. A
@@ -693,6 +695,7 @@
     shown = false;
     actualSize = null;
     turns = 0;
+    uprightBox = null;
     keysOpen = false;
     listenToWheel(false);
     if (!host) return;
@@ -890,15 +893,18 @@
 
   // ---- Turning ----
 
-  // R turns the image or video a quarter turn clockwise, and four turns bring it back. The popup takes the turned
-  // shape, placed afresh beside the pointer as when it opened; at actual size, the mouse looks around the turned
-  // image, and Z goes back to a popup of the turned shape. Only the view turns: S, O and C take the file as it
-  // is. The next image starts upright.
+  // R turns the image or video a quarter turn clockwise, and four turns bring it back. The popup turns in place,
+  // about its middle, where the eye is (turnInPlace); at actual size, the mouse looks around the turned image, and
+  // Z goes back to the popup turned in place. Only the view turns: S, O and C take the file as it is. The next
+  // image starts upright.
   function turn() {
     if (!shown || !full) return;
-    const box = placePopup(turned(sizeOf(full), turns + 1), pointer, viewport(), null, hintRoom());
-    if (!box) return;
+    if (!turns) {
+      const box = actualSize || host.getBoundingClientRect();
+      uprightBox = { left: box.left, top: box.top, width: box.width, height: box.height };
+    }
     turns = (turns + 1) % 4;
+    const box = turnInPlace(uprightBox, turns, viewport(), hintRoom());
     // The thumbnail standing in for the full image doesn't turn with it.
     thumbImg.style.display = 'none';
     if (actualSize) {
