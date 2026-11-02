@@ -4,7 +4,7 @@ Largitude shows the full-size version of an image when you rest the mouse on it:
 • Knows where many sites keep the original uploads, so you see the full image rather than the page's smaller copy: Reddit, X, Bluesky, Imgur, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr, and any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google.
 • Galleries: on a Reddit gallery, or an X or Bluesky post with several images, the arrow keys or the mouse wheel move through them, with a counter showing where you are.
 • Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses.
-• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies its address, and Z shows an image at its actual size, the mouse moving around it.
+• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies its address, Z shows an image at its actual size, the mouse moving around it, and R turns it a quarter turn.
 • YouTube: a video's largest still, for its thumbnails and links to it on other sites.
 • Sees through the transparent layers many sites put over their images, and into web components.
 • Opens at its final size right away, with the thumbnail standing in while the full image loads.

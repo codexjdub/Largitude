@@ -209,6 +209,40 @@
     await away(document);
   }
 
+  // R turns the image a quarter turn and the popup takes the turned shape; four turns bring it back. At actual
+  // size the mouse looks around the turned image, and Z goes back to a popup of the shape it's turned to.
+  async function checkTurn() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    const point = await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    const view = document.documentElement;
+    const tall = (box) => Math.abs(box.height / box.width - 4 / 3) < 0.02;
+    const wide = (box) => Math.abs(box.width / box.height - 4 / 3) < 0.02;
+    const reached = pressReaches('r');
+    let popup = popupIn(document);
+    let seen = popup.full ? popup.full.getBoundingClientRect() : null;
+    const covered = !!seen && Math.abs(seen.width - popup.box.width) < 1 && Math.abs(seen.height - popup.box.height) < 1;
+    report(!reached && popup.open && tall(popup.box) && covered, 'R turns the image a quarter turn, the popup taking its shape, without reaching the page', `box ${JSON.stringify(popup.box)}, image ${JSON.stringify(seen)}`);
+    ['r', 'r', 'r'].forEach(pressReaches);
+    popup = popupIn(document);
+    report(popup.open && wide(popup.box) && popup.full.style.transform === 'none', 'four turns bring it back upright', `box ${JSON.stringify(popup.box)}, ${popup.full && popup.full.style.transform}`);
+    pressReaches('r');
+    pressReaches('z');
+    moveTo(document, 0, 0);
+    const corner = popupIn(document).full.getBoundingClientRect();
+    moveTo(document, view.clientWidth - 1, view.clientHeight - 1);
+    seen = popupIn(document).full.getBoundingClientRect();
+    const around = Math.round(corner.left) === 0 && Math.round(corner.top) === 0 && Math.round(seen.right) === view.clientWidth;
+    report(around && Math.round(seen.width) === 1200 && Math.round(seen.height) === 1600, 'at actual size, the mouse looks around the turned image', `at the top left ${JSON.stringify(corner)}, at the bottom right ${JSON.stringify(seen)}`);
+    moveTo(document, point.x, point.y);
+    pressReaches('r');
+    pressReaches('z');
+    popup = popupIn(document);
+    report(popup.open && wide(popup.box), 'turned at actual size, Z goes back to a popup of the new shape', `box ${JSON.stringify(popup.box)}`);
+    await away(document);
+  }
+
   // A key typed in a web component's text box goes to the box, even with a gallery's popup open: the page sees the
   // key as coming from the component, so Largitude has to look for the focus inside it.
   async function checkTypingInComponent() {
@@ -377,6 +411,7 @@
     await checkBehavior();
     await checkTypingInComponent();
     await checkActualSize();
+    await checkTurn();
     if (standalone) await checkSaveKey();
     if (standalone) await checkOpenAndCopy();
     const failed = lines.filter((line) => !line.ok).length;

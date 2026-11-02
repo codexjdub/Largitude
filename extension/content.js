@@ -315,11 +315,12 @@
   let toast = null;
   let toastTimer = 0;
   let actualSize = null; // with Z, the popup's box from before it showed the image at its actual size
+  let turns = 0; // the quarter turns clockwise R has given the image or video shown
 
   const make = (tag) => document.createElement(tag);
   const setStyles = (el, styles, important) =>
     Object.keys(styles).forEach((name) => el.style.setProperty(name, styles[name], important ? 'important' : ''));
-  const FILL = { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', display: 'block', margin: '0' };
+  const FILL = { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', display: 'block', margin: '0', transform: 'none' };
 
   // Styles are set on the elements themselves rather than in a stylesheet: a page's content security policy
   // can't block them, and !important on the host beats the page's stylesheets and the browser's popover styles.
@@ -464,7 +465,8 @@
   function showMedia(item, media, box) {
     clearTimeout(spinnerTimer);
     spinnerTimer = 0;
-    leaveActualSize();
+    actualSize = null;
+    turns = 0;
     if (!host) createHost();
     spinner.style.display = 'none';
     // The thumbnail, already loaded, stands in while the full image arrives over it, if it's the same shape. A
@@ -484,9 +486,9 @@
         release(full);
       }
       full = media;
-      setStyles(media, FILL);
       host.shadowRoot.insertBefore(media, spinner);
     }
+    setStyles(media, FILL);
     media.style.display = 'block';
     if (gallery) counter.textContent = gallery.index + 1 + ' / ' + gallery.items.length;
     counter.style.display = gallery ? 'block' : 'none';
@@ -503,6 +505,8 @@
   const sizeOf = (media) =>
     isVideo(media) ? { width: media.videoWidth, height: media.videoHeight } : { width: media.naturalWidth, height: media.naturalHeight };
   const hasSize = (media) => sizeOf(media).width > 0 && sizeOf(media).height > 0;
+  // A size as it is once turned `quarters` quarter turns.
+  const turned = (size, quarters) => (quarters % 2 ? { width: size.height, height: size.width } : size);
   const sameShape = (a, b) => Math.abs(a.width / a.height - b.width / b.height) <= 0.03 * (b.width / b.height);
   // Whether `url`, one of `item`'s addresses, is a video: a video file by its name, or what a page's video plays.
   const isVideoAddress = (item, url) => isVideoFileUrl(url) || (!!item.videos && item.videos.indexOf(url) !== -1);
@@ -568,6 +572,7 @@
     gallery = null;
     shown = false;
     actualSize = null;
+    turns = 0;
     listenToWheel(false);
     if (!host) return;
     host.style.setProperty('display', 'none', 'important');
@@ -730,11 +735,12 @@
     if (!shown || !full) return;
     if (actualSize) {
       const box = actualSize;
-      leaveActualSize();
+      actualSize = null;
       placeHost(box);
+      fitToPopup(box);
       return;
     }
-    const size = sizeOf(full);
+    const size = turned(sizeOf(full), turns);
     const box = host.getBoundingClientRect();
     if (size.width <= Math.ceil(box.width) && size.height <= Math.ceil(box.height)) {
       note('Already at actual size');
@@ -744,7 +750,6 @@
     thumbImg.style.display = 'none';
     const view = viewport();
     placeHost({ left: 0, top: 0, width: view.width, height: view.height });
-    setStyles(full, { width: size.width + 'px', height: size.height + 'px' });
     lookAround();
   }
 
@@ -752,17 +757,51 @@
   // image's left edge shows, at the right edge its right edge, and so on. A side that fits in the window is
   // centered.
   function lookAround() {
-    const size = sizeOf(full);
+    const size = turned(sizeOf(full), turns);
     const view = viewport();
     const offset = (length, room, at) => (length <= room ? (room - length) / 2 : (room - length) * Math.min(1, Math.max(0, at / room)));
-    full.style.left = offset(size.width, view.width, pointer.x) + 'px';
-    full.style.top = offset(size.height, view.height, pointer.y) + 'px';
+    fitTurned({ left: offset(size.width, view.width, pointer.x), top: offset(size.height, view.height, pointer.y), ...size });
   }
 
-  function leaveActualSize() {
-    if (!actualSize) return;
-    actualSize = null;
-    if (full) setStyles(full, FILL);
+  // ---- Turning ----
+
+  // R turns the image or video a quarter turn clockwise, and four turns bring it back. The popup takes the turned
+  // shape, placed afresh beside the pointer as when it opened; at actual size, the mouse looks around the turned
+  // image, and Z goes back to a popup of the turned shape. Only the view turns: S, O and C take the file as it
+  // is. The next image starts upright.
+  function turn() {
+    if (!shown || !full) return;
+    const box = placePopup(turned(sizeOf(full), turns + 1), pointer, viewport());
+    if (!box) return;
+    turns = (turns + 1) % 4;
+    // The thumbnail standing in for the full image doesn't turn with it.
+    thumbImg.style.display = 'none';
+    if (actualSize) {
+      actualSize = box;
+      lookAround();
+      return;
+    }
+    placeHost(box);
+    fitToPopup(box);
+  }
+
+  // The image or video shown, turned as R left it, covering `box`: a box in the popup, which at actual size is
+  // the whole window.
+  function fitTurned(box) {
+    const unturned = unturnedBox(box, turns);
+    setStyles(full, {
+      left: unturned.left + 'px',
+      top: unturned.top + 'px',
+      width: unturned.width + 'px',
+      height: unturned.height + 'px',
+      transform: turns ? `rotate(${turns / 4}turn)` : 'none',
+    });
+  }
+
+  // The image or video shown, filling the popup placed at `box`.
+  function fitToPopup(box) {
+    if (turns) fitTurned({ left: 0, top: 0, width: box.width, height: box.height });
+    else setStyles(full, FILL);
   }
 
   // ---- Moving through a gallery ----
@@ -942,8 +981,9 @@
   // Leaving the window (or entering a frame in it).
   document.addEventListener('mouseout', (event) => !event.relatedTarget && (hovered || shown) && hide(), passive);
   // Escape closes the popup, ← → move through a gallery, S saves, O opens in a new tab, C copies the address, Z
-  // shows the actual size, and for a video M turns the sound on or off and Space pauses, without the keys also
-  // reaching the page, which might close a dialog, move a carousel, scroll or have shortcuts of its own.
+  // shows the actual size, R turns the image, and for a video M turns the sound on or off and Space pauses,
+  // without the keys also reaching the page, which might close a dialog, move a carousel, scroll or have
+  // shortcuts of its own.
   window.addEventListener(
     'keydown',
     (event) => {
@@ -956,7 +996,7 @@
       if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping()) return;
       const step = gallery ? { ArrowRight: 1, ArrowLeft: -1 }[event.key] : 0;
       const video = isVideo(full) ? full : null;
-      const actions = { s: save, o: openInTab, c: copyAddress, z: toggleActualSize };
+      const actions = { s: save, o: openInTab, c: copyAddress, z: toggleActualSize, r: turn };
       if (video) Object.assign(actions, { m: () => toggleSound(video), ' ': () => togglePause(video) });
       const action = actions[event.key.toLowerCase()];
       if (!step && !action) return;

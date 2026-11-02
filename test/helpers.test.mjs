@@ -23,6 +23,7 @@ const {
   colorAlpha,
   placePopup,
   isWorthShowing,
+  unturnedBox,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -273,4 +274,14 @@ test('isWorthShowing wants the popup clearly bigger than the page shows it', () 
   assert.equal(isWorthShowing({ width: 450, height: 150 }, { width: 150, height: 150 }), true);
   // Nothing on the page to compare with, as for a text link.
   assert.equal(isWorthShowing({ width: 100, height: 100 }, null), true);
+});
+
+test('unturnedBox swaps the sides for a quarter turn, keeping the middle', () => {
+  const box = { left: 0, top: 0, width: 400, height: 300 };
+  assert.deepEqual(plain(unturnedBox(box, 1)), { left: 50, top: -50, width: 300, height: 400 });
+  assert.deepEqual(plain(unturnedBox(box, 3)), { left: 50, top: -50, width: 300, height: 400 });
+  assert.deepEqual(plain(unturnedBox(box, 2)), box);
+  assert.deepEqual(plain(unturnedBox(box, 0)), box);
+  // At actual size, the part of the window the turned image takes: off the window's left and top.
+  assert.deepEqual(plain(unturnedBox({ left: -200, top: -800, width: 1200, height: 1600 }, 1)), { left: -400, top: -600, width: 1600, height: 1200 });
 });

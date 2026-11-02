@@ -275,3 +275,15 @@ function isWorthShowing(popup, shown) {
   if (!shown || shown.width < 1 || shown.height < 1) return true;
   return popup.width >= shown.width * 1.2 || popup.height >= shown.height * 1.2;
 }
+
+// The box an image or video turned `turns` quarter turns about its middle must have to cover `box` once turned:
+// the same for a half turn, or with width and height swapped for a quarter turn, on the same middle.
+function unturnedBox(box, turns) {
+  if (turns % 2 === 0) return box;
+  return {
+    left: box.left + (box.width - box.height) / 2,
+    top: box.top + (box.height - box.width) / 2,
+    width: box.height,
+    height: box.width,
+  };
+}

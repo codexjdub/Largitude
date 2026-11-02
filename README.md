@@ -17,6 +17,7 @@ While it's open:
 | O | Open it in a new tab |
 | C | Copy its address |
 | Z | Show the image at its actual size, filling the window; move the mouse to look around it, and press Z again to go back |
+| R | Turn the image or video a quarter turn clockwise |
 | M | Turn a video's sound on or off |
 | Space | Pause or play a video |
 | Escape, or a click | Close it |
