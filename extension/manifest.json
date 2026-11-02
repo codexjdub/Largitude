@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Largitude",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Hover over a thumbnail, a link to an image or a small video to see it full size, on any site.",
   "browser_specific_settings": {
     "gecko": {

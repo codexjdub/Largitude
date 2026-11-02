@@ -15,6 +15,7 @@ async function load() {
   const values = { ...DEFAULT_OPTIONS, ...options };
   if (field('excluded').value !== values.excluded) field('excluded').value = values.excluded;
   field('galleryWheelReversed').checked = values.galleryWheelReversed;
+  field('keysUnderPopup').checked = values.keysUnderPopup;
 }
 
 async function save() {
@@ -22,6 +23,7 @@ async function save() {
     options: {
       excluded: field('excluded').value,
       galleryWheelReversed: field('galleryWheelReversed').checked,
+      keysUnderPopup: field('keysUnderPopup').checked,
     },
   });
   show('Saved.');

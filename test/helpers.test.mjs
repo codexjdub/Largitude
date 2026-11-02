@@ -267,6 +267,31 @@ test('placePopup has nowhere to go in a window too small', () => {
   assert.equal(placePopup({ width: 100, height: 100 }, { x: 5, y: 5 }, { width: 10, height: 10 }), null);
 });
 
+test('placePopup keeps room under the popup, between it and the pointer when it goes above', () => {
+  const view = { width: 1280, height: 800 };
+  const under = 32;
+  // Beside the pointer, a tall image is fitted shorter, and the room under it stays inside the window.
+  const beside = placePopup({ width: 1000, height: 2000 }, { x: 200, y: 400 }, view, null, under);
+  assert.equal(beside.side, 'right');
+  assert.equal(beside.height, 800 - 16 - under);
+  assert.ok(beside.top + beside.height + under <= 800 - 8);
+  // Below the pointer, the same.
+  const below = placePopup({ width: 2400, height: 1200 }, { x: 640, y: 100 }, view, null, under);
+  assert.equal(below.side, 'below');
+  assert.ok(below.top + below.height + under <= 800 - 8);
+  // Above the pointer, the room is between the popup and the pointer.
+  const above = placePopup({ width: 2400, height: 1200 }, { x: 640, y: 700 }, view, null, under);
+  assert.equal(above.side, 'above');
+  assert.equal(above.top + above.height + under, 700 - 16);
+  // Covering the window, centered with the room counted in.
+  const cover = placePopup({ width: 1600, height: 1200 }, { x: 600, y: 400 }, { width: 1200, height: 800 }, null, under);
+  assert.equal(cover.side, 'cover');
+  assert.equal(cover.height, 800 - 16 - under);
+  assert.equal(cover.top, Math.round((800 - under - cover.height) / 2));
+  // Without room asked for, nothing changes.
+  assert.deepEqual(plain(placePopup({ width: 1000, height: 2000 }, { x: 200, y: 400 }, view, null, 0)), plain(placePopup({ width: 1000, height: 2000 }, { x: 200, y: 400 }, view)));
+});
+
 test('isWorthShowing wants the popup clearly bigger than the page shows it', () => {
   assert.equal(isWorthShowing({ width: 400, height: 300 }, { width: 200, height: 150 }), true);
   assert.equal(isWorthShowing({ width: 210, height: 160 }, { width: 200, height: 150 }), false);

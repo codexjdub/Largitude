@@ -235,22 +235,23 @@ function colorAlpha(color) {
 // and all, when every side would show it at less than two thirds of the size the whole window allows, or when
 // only the whole window shows it clearly bigger than the page does (`shown`, the size on the page, if any):
 // where the pointer happens to be shouldn't decide whether there's a popup. The popup lets the mouse through,
-// so the image under it still counts as hovered. Returns { side, left, top, width, height } in CSS pixels, or
-// null when there's no room at all.
-function placePopup(natural, pointer, view, shown, gap = 16, margin = 8) {
+// so the image under it still counts as hovered. `under` is room kept below the popup, for the line of keys
+// shown there; above the pointer, it goes between the popup and the pointer. Returns { side, left, top, width,
+// height } in CSS pixels, or null when there's no room at all.
+function placePopup(natural, pointer, view, shown, under = 0, gap = 16, margin = 8) {
   const fit = (w, h) => (w >= 1 && h >= 1 ? Math.min(1, w / natural.width, h / natural.height) : 0);
   const size = (scale) => ({
     width: Math.max(1, Math.floor(natural.width * scale)),
     height: Math.max(1, Math.floor(natural.height * scale)),
   });
   const sides = [
-    { side: 'right', scale: fit(view.width - margin - pointer.x - gap, view.height - 2 * margin) },
-    { side: 'left', scale: fit(pointer.x - gap - margin, view.height - 2 * margin) },
-    { side: 'below', scale: fit(view.width - 2 * margin, view.height - margin - pointer.y - gap) },
-    { side: 'above', scale: fit(view.width - 2 * margin, pointer.y - gap - margin) },
+    { side: 'right', scale: fit(view.width - margin - pointer.x - gap, view.height - 2 * margin - under) },
+    { side: 'left', scale: fit(pointer.x - gap - margin, view.height - 2 * margin - under) },
+    { side: 'below', scale: fit(view.width - 2 * margin, view.height - margin - pointer.y - gap - under) },
+    { side: 'above', scale: fit(view.width - 2 * margin, pointer.y - gap - margin - under) },
   ];
   let best = sides.reduce((a, b) => (b.scale > a.scale ? b : a));
-  const whole = fit(view.width - 2 * margin, view.height - 2 * margin);
+  const whole = fit(view.width - 2 * margin, view.height - 2 * margin - under);
   const cramped = whole > best.scale * 1.5;
   const onlyWholeShowsMore = !isWorthShowing(size(best.scale), shown) && isWorthShowing(size(whole), shown);
   if (cramped || onlyWholeShowsMore) best = { side: 'cover', scale: whole };
@@ -258,13 +259,13 @@ function placePopup(natural, pointer, view, shown, gap = 16, margin = 8) {
   const { width, height } = size(best.scale);
   const clamp = (value, low, high) => Math.round(Math.max(low, Math.min(value, high)));
   const across = clamp(pointer.x - width / 2, margin, view.width - margin - width);
-  const down = clamp(pointer.y - height / 2, margin, view.height - margin - height);
+  const down = clamp(pointer.y - height / 2, margin, view.height - margin - under - height);
   const spot = {
     right: [pointer.x + gap, down],
     left: [pointer.x - gap - width, down],
     below: [across, pointer.y + gap],
-    above: [across, pointer.y - gap - height],
-    cover: [Math.round((view.width - width) / 2), Math.round((view.height - height) / 2)],
+    above: [across, pointer.y - gap - under - height],
+    cover: [Math.round((view.width - width) / 2), Math.round((view.height - under - height) / 2)],
   }[best.side];
   return { side: best.side, left: Math.round(spot[0]), top: Math.round(spot[1]), width, height };
 }

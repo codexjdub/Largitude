@@ -20,10 +20,11 @@
   const WHEEL_STEP = 40; // px of wheel movement that moves to the next image in a gallery
   const WHEEL_SETTLE = 150; // ms without wheel movement that ends a gesture, which moves one image at most
   const SHOWABLE_TYPES = /^image\/(?:jpeg|png|gif|webp|avif|bmp|svg\+xml)$/i;
+  const HINT_ROOM = 32; // px kept under the popup for the line of keys: its 26 and the 6 between them
 
   let enabled = false;
-  let held = false; // Shift is held down, which keeps popups away
   let reverseWheel = false; // the "Reverse the mouse wheel in galleries" setting
+  let keysUnder = true; // the "Show keys under the popup" setting
   let pointer = { x: 0, y: 0 };
   let frame = 0; // the animation frame that will look under the pointer
   let hovered = null; // the image or video under the pointer: { el, thumb, thumbSize, urls, videos, streamed, shownSize }
@@ -306,6 +307,9 @@
   // ---- The popup ----
 
   let host = null;
+  let stage = null; // the popup's box, which the image or video, the counter and the notes stay inside
+  let hint = null; // the line of keys under the popup
+  let keysPanel = null; // every key, over the popup, while ? has it open
   let thumbImg = null;
   let full = null; // the full-size <img> or <video> in the popup
   let spinner = null;
@@ -316,11 +320,26 @@
   let toastTimer = 0;
   let actualSize = null; // with Z, the popup's box from before it showed the image at its actual size
   let turns = 0; // the quarter turns clockwise R has given the image or video shown
+  let keysOpen = false;
 
   const make = (tag) => document.createElement(tag);
   const setStyles = (el, styles, important) =>
     Object.keys(styles).forEach((name) => el.style.setProperty(name, styles[name], important ? 'important' : ''));
   const FILL = { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', display: 'block', margin: '0', transform: 'none' };
+  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  // What each key does, for the panel ? opens.
+  const KEYS = [
+    ['← →', 'Move through a gallery'],
+    ['S', 'Save'],
+    ['O', 'Open in a new tab'],
+    ['C', 'Copy the address'],
+    ['Z', 'Actual size'],
+    ['R', 'Turn a quarter turn'],
+    ['M', 'Sound on or off (video)'],
+    ['Space', 'Pause (video)'],
+    ['?', 'Show or hide these keys'],
+    ['Esc', 'Close'],
+  ];
 
   // Styles are set on the elements themselves rather than in a stylesheet: a page's content security policy
   // can't block them, and !important on the host beats the page's stylesheets and the browser's popover styles.
@@ -338,7 +357,7 @@
         padding: '0',
         border: '0',
         'box-sizing': 'border-box',
-        overflow: 'hidden',
+        overflow: 'visible',
         'pointer-events': 'none',
         'border-radius': '4px',
         background: '#1c1c1e',
@@ -347,6 +366,8 @@
       true
     );
     const shadow = host.attachShadow({ mode: 'open' });
+    stage = make('div');
+    setStyles(stage, { ...FILL, overflow: 'hidden', 'border-radius': '4px' });
     thumbImg = make('img');
     thumbImg.alt = '';
     setStyles(thumbImg, FILL);
@@ -411,7 +432,67 @@
       'white-space': 'nowrap',
       display: 'none',
     });
-    shadow.append(thumbImg, spinner, counter, progress, toast);
+    stage.append(thumbImg, spinner, counter, progress, toast);
+    // Centered under the popup.
+    hint = make('div');
+    setStyles(hint, {
+      position: 'absolute',
+      top: 'calc(100% + 6px)',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      gap: '10px',
+      padding: '4px 12px',
+      'border-radius': '13px',
+      background: 'rgba(0, 0, 0, 0.75)',
+      color: 'rgba(255, 255, 255, 0.9)',
+      font: `12px/18px ${FONT}`,
+      'white-space': 'nowrap',
+      display: 'none',
+    });
+    // Centered on the popup, and larger than a small one.
+    keysPanel = make('div');
+    setStyles(keysPanel, {
+      position: 'absolute',
+      'z-index': '2',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      'grid-template-columns': 'auto auto auto auto',
+      gap: '6px 10px',
+      'align-items': 'baseline',
+      padding: '12px 14px',
+      'border-radius': '8px',
+      background: 'rgba(0, 0, 0, 0.8)',
+      color: 'rgba(255, 255, 255, 0.9)',
+      font: `13px/20px ${FONT}`,
+      'white-space': 'nowrap',
+      display: 'none',
+    });
+    KEYS.forEach(([key, what]) => keysPanel.append(keycap(key), label(what)));
+    const footnote = label("Largitude's settings turn the keys under the popup on or off.");
+    setStyles(footnote, { 'grid-column': '1 / -1', 'margin-top': '4px', color: 'rgba(255, 255, 255, 0.6)', font: `12px/18px ${FONT}` });
+    keysPanel.append(footnote);
+    shadow.append(stage, hint, keysPanel);
+  }
+
+  function keycap(key) {
+    const cap = make('b');
+    setStyles(cap, {
+      'justify-self': 'center',
+      padding: '0 5px',
+      'border-radius': '4px',
+      background: 'rgba(255, 255, 255, 0.18)',
+      color: '#fff',
+      font: '500 11px/18px ui-monospace, Menlo, Consolas, monospace',
+    });
+    cap.textContent = key;
+    return cap;
+  }
+
+  function label(words) {
+    const span = make('span');
+    span.textContent = words;
+    return span;
   }
 
   function note(text) {
@@ -438,7 +519,45 @@
     } catch (err) {
       // Removed by the page in the meantime: it goes back in next time.
     }
+    if (hint.style.display !== 'none') keepInWindow(hint);
+    if (keysOpen) keepInWindow(keysPanel);
   }
+
+  // Moves `el`, centered on the popup or under it, as little as needed to stay inside the window.
+  function keepInWindow(el) {
+    el.style.margin = '0';
+    const box = el.getBoundingClientRect();
+    const view = viewport();
+    const shift = (start, end, room) => Math.max(8 - start, Math.min(0, room - 8 - end));
+    el.style.marginLeft = shift(box.left, box.right, view.width) + 'px';
+    el.style.marginTop = shift(box.top, box.bottom, view.height) + 'px';
+  }
+
+  // The line of keys under the popup, with the setting on: a few for what it shows, and ? for the rest. Not at
+  // actual size, where the popup fills the window.
+  function showHint() {
+    if (!keysUnder || actualSize || !full) {
+      hint.style.display = 'none';
+      return;
+    }
+    const keys = isVideo(full)
+      ? [['M', 'sound'], ['Space', 'pause'], ['S', 'save']]
+      : gallery
+        ? [['← →', 'next'], ['S', 'save'], ['Z', 'actual size']]
+        : [['S', 'save'], ['Z', 'actual size'], ['R', 'turn']];
+    hint.replaceChildren(
+      ...keys.concat([['?', 'all keys']]).map(([key, what]) => {
+        const item = label(' ' + what);
+        item.prepend(keycap(key));
+        return item;
+      })
+    );
+    hint.style.display = 'flex';
+    keepInWindow(hint);
+  }
+
+  // The room to keep under the popup for the line of keys.
+  const hintRoom = () => (keysUnder ? HINT_ROOM : 0);
 
   // The spinner, on its own beside the pointer while the first image's size isn't known yet, or in the corner
   // of the popup while the next image of a gallery is on its way.
@@ -486,7 +605,7 @@
         release(full);
       }
       full = media;
-      host.shadowRoot.insertBefore(media, spinner);
+      stage.insertBefore(media, spinner);
     }
     setStyles(media, FILL);
     media.style.display = 'block';
@@ -494,6 +613,7 @@
     counter.style.display = gallery ? 'block' : 'none';
     placeHost(box);
     shown = true;
+    showHint();
     listenToWheel(!!gallery);
     // The progress bar starts afresh for a video, and goes for an image.
     progressDone = 0;
@@ -573,6 +693,7 @@
     shown = false;
     actualSize = null;
     turns = 0;
+    keysOpen = false;
     listenToWheel(false);
     if (!host) return;
     host.style.setProperty('display', 'none', 'important');
@@ -589,6 +710,8 @@
     thumbImg.removeAttribute('src');
     counter.style.display = 'none';
     progress.style.display = 'none';
+    hint.style.display = 'none';
+    keysPanel.style.display = 'none';
     clearTimeout(toastTimer);
     toast.style.display = 'none';
   }
@@ -673,7 +796,7 @@
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, true);
     fetchMedia(target, (media) => {
       if (target !== hovered) return;
-      const box = media && placePopup(sizeOf(media), pointer, viewport(), target.shownSize);
+      const box = media && placePopup(sizeOf(media), pointer, viewport(), target.shownSize, hintRoom());
       if (!box || !isWorthShowing(box, target.shownSize)) {
         dismiss();
         return;
@@ -698,7 +821,7 @@
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
     fetchMedia(item, (media) => {
       if (target !== hovered || !gallery || gallery.index !== to) return;
-      const box = media && placePopup(sizeOf(media), pointer, viewport());
+      const box = media && placePopup(sizeOf(media), pointer, viewport(), null, hintRoom());
       if (box) {
         showMedia(item, media, box);
         preloadAround();
@@ -738,6 +861,7 @@
       actualSize = null;
       placeHost(box);
       fitToPopup(box);
+      showHint();
       return;
     }
     const size = turned(sizeOf(full), turns);
@@ -748,6 +872,7 @@
     }
     actualSize = { left: box.left, top: box.top, width: box.width, height: box.height };
     thumbImg.style.display = 'none';
+    hint.style.display = 'none';
     const view = viewport();
     placeHost({ left: 0, top: 0, width: view.width, height: view.height });
     lookAround();
@@ -771,7 +896,7 @@
   // is. The next image starts upright.
   function turn() {
     if (!shown || !full) return;
-    const box = placePopup(turned(sizeOf(full), turns + 1), pointer, viewport());
+    const box = placePopup(turned(sizeOf(full), turns + 1), pointer, viewport(), null, hintRoom());
     if (!box) return;
     turns = (turns + 1) % 4;
     // The thumbnail standing in for the full image doesn't turn with it.
@@ -897,6 +1022,14 @@
     }
   }
 
+  // ?: every key, over the popup, until ? again or the popup closes. It stays open through a gallery.
+  function toggleKeys() {
+    if (!shown) return;
+    keysOpen = !keysOpen;
+    keysPanel.style.display = keysOpen ? 'grid' : 'none';
+    if (keysOpen) keepInWindow(keysPanel);
+  }
+
   // ---- Video ----
 
   // M: the sound on or off. Firefox knows whether a video has any.
@@ -924,7 +1057,7 @@
 
   function update() {
     frame = 0;
-    if (!enabled || held) return;
+    if (!enabled) return;
     const found = findImage(pointer.x, pointer.y);
     const el = found ? found.el : null;
     if (dismissed && el !== dismissed) dismissed = null;
@@ -948,22 +1081,11 @@
       if (hovered) dismiss();
       return;
     }
-    // The event says whether Shift is down, even when it was pressed or let go in another window.
-    keepAway(event.shiftKey);
-    if (enabled && !held && !frame) frame = requestAnimationFrame(update);
-  }
-
-  // Holding Shift keeps popups away, to move across images to something else, and pressing it closes one that's
-  // open. Once it's let go, the next move of the mouse opens popups again.
-  function keepAway(on) {
-    held = on;
-    if (held && (hovered || shown)) hide();
+    if (enabled && !frame) frame = requestAnimationFrame(update);
   }
 
   const passive = { capture: true, passive: true };
   window.addEventListener('mousemove', onMove, passive);
-  window.addEventListener('keydown', (event) => event.key === 'Shift' && keepAway(true), passive);
-  window.addEventListener('keyup', (event) => event.key === 'Shift' && keepAway(false), passive);
   window.addEventListener('mousedown', () => hovered && dismiss(), passive);
   // Scrolling closes the popup when it moves the image: the page scrolling, or a box the image is in. Other boxes
   // scrolling, such as a chat or a ticker, leave it open.
@@ -981,9 +1103,9 @@
   // Leaving the window (or entering a frame in it).
   document.addEventListener('mouseout', (event) => !event.relatedTarget && (hovered || shown) && hide(), passive);
   // Escape closes the popup, ← → move through a gallery, S saves, O opens in a new tab, C copies the address, Z
-  // shows the actual size, R turns the image, and for a video M turns the sound on or off and Space pauses,
-  // without the keys also reaching the page, which might close a dialog, move a carousel, scroll or have
-  // shortcuts of its own.
+  // shows the actual size, R turns the image, ? lists the keys, and for a video M turns the sound on or off and
+  // Space pauses, without the keys also reaching the page, which might close a dialog, move a carousel, scroll or
+  // have shortcuts of its own.
   window.addEventListener(
     'keydown',
     (event) => {
@@ -996,7 +1118,7 @@
       if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping()) return;
       const step = gallery ? { ArrowRight: 1, ArrowLeft: -1 }[event.key] : 0;
       const video = isVideo(full) ? full : null;
-      const actions = { s: save, o: openInTab, c: copyAddress, z: toggleActualSize, r: turn };
+      const actions = { s: save, o: openInTab, c: copyAddress, z: toggleActualSize, r: turn, '?': toggleKeys };
       if (video) Object.assign(actions, { m: () => toggleSound(video), ' ': () => togglePause(video) });
       const action = actions[event.key.toLowerCase()];
       if (!step && !action) return;
@@ -1010,8 +1132,9 @@
 
   // ---- Settings ----
 
-  // Whether this site is one to leave alone, and which way the wheel goes, from the background script. With no
-  // answer, as when it isn't up yet, Largitude works with the defaults rather than stay off for good.
+  // Whether this site is one to leave alone, which way the wheel goes and whether keys show under the popup, from
+  // the background script. With no answer, as when it isn't up yet, Largitude works with the defaults rather than
+  // stay off for good.
   async function loadSettings() {
     let settings = null;
     try {
@@ -1021,6 +1144,7 @@
     }
     enabled = !(settings && settings.excluded);
     reverseWheel = !!(settings && settings.reverseWheel);
+    keysUnder = !(settings && settings.keysUnder === false);
     if (!enabled) hide();
   }
 

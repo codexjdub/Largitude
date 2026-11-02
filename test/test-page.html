@@ -360,9 +360,13 @@
 
   // ?standalone loads Largitude's content scripts, the ones the manifest lists, into the page itself, with a
   // stand-in for the two extension APIs they use, so the cases can be tried in any browser. Closed shadow roots
-  // are out of their reach there.
+  // are out of their reach there. The settings are window.standaloneSettings, which the checks set, telling the
+  // listeners it changed.
   if (new URLSearchParams(location.search).has('standalone')) {
-    window.browser = { runtime: { sendMessage: async () => false }, storage: { onChanged: { addListener() {} } } };
+    window.browser = {
+      runtime: { sendMessage: async (message) => (message && message.type === 'settings' && window.standaloneSettings) || false },
+      storage: { onChanged: { listeners: [], addListener(listener) { this.listeners.push(listener); } } },
+    };
     fetch('../extension/manifest.json')
       .then((response) => response.json())
       .then((manifest) => {

@@ -11,12 +11,13 @@ async function loadOptions() {
 }
 
 async function settingsFor(sender) {
-  const { excluded, galleryWheelReversed } = await loadOptions();
+  const { excluded, galleryWheelReversed, keysUnderPopup } = await loadOptions();
   return {
     // The tab's page counts as well as the frame's own address, so a frame embedded on a site to leave alone is
     // left alone too.
     excluded: [sender.tab && sender.tab.url, sender.url].some((url) => !!url && isExcluded(excluded, url)),
     reverseWheel: !!galleryWheelReversed,
+    keysUnder: !!keysUnderPopup,
   };
 }
 

@@ -28,12 +28,14 @@
   }
 
   // What Largitude shows in a document: whether the popup is open, the file name of the full image or video in
-  // it, the gallery counter ("2 / 3"), any note ("Saved"), where it is, and the video. The thumbnail standing in
-  // for the full image comes first in the popup, the full image or video last.
+  // it, the gallery counter ("2 / 3"), any note ("Saved"), where it is, the video, the line of keys under it and
+  // the panel of keys ? opens. The popup's box comes first in its shadow root, then the line and the panel; in the
+  // box, the thumbnail standing in for the full image comes first, the full image or video last.
   function popupIn(doc) {
     const host = doc.querySelector('largitude-popup');
     if (!host || host.style.display === 'none' || !host.matches(':popover-open')) return { open: false };
-    const children = [...host.shadowRoot.children];
+    const [stage, hint, keys] = host.shadowRoot.children;
+    const children = [...stage.children];
     const media = children.filter((el) => el.localName === 'img' || el.localName === 'video');
     const full = media.length > 1 ? media[media.length - 1] : null;
     const src = full && full.style.display !== 'none' ? full.src.split('/').pop() : '';
@@ -48,6 +50,9 @@
       box: host.getBoundingClientRect(),
       full,
       video: full && full.localName === 'video' ? full : null,
+      hint: hint.style.display !== 'none' ? hint.textContent : '',
+      hintBox: hint.getBoundingClientRect(),
+      keys: keys.style.display !== 'none' ? keys : null,
     };
   }
 
@@ -382,22 +387,49 @@
     report(!!(await until(() => !isOpen(), 500)), 'scrolling the page closes it');
     await away(document);
 
-    point = await hover(document, el);
+    await hover(document, el);
     await until(isOpen, 3000);
     await away(document);
     report(!isOpen(), 'moving off the image closes it');
+  }
 
-    point = await hover(document, el);
-    await until(isOpen, 3000);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true }));
-    report(!!(await until(() => !isOpen(), 500)), 'pressing Shift closes it');
-    moveTo(document, point.x + 3, point.y + 3, { shiftKey: true });
-    await wait(DELAY + 500);
-    report(!isOpen(), 'while Shift is held, resting on an image opens nothing');
-    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
-    moveTo(document, point.x, point.y);
-    report(!!(await until(isOpen, 3000)), 'once Shift is let go, moving the mouse opens it again');
+  // A line under the popup shows a few keys, and ? (typed with Shift) shows them all over it.
+  async function checkKeys() {
+    const el = document.querySelector('.case .target');
     await away(document);
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    let popup = popupIn(document);
+    const under = popup.hintBox.top >= popup.box.bottom && popup.hintBox.bottom <= document.documentElement.clientHeight;
+    report(/save/.test(popup.hint) && /all keys/.test(popup.hint) && under, 'a line under the popup shows a few keys, and ? for all of them', `"${popup.hint}", line ${JSON.stringify(popup.hintBox)}, popup ${JSON.stringify(popup.box)}`);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true }));
+    const reached = pressReaches('?');
+    popup = popupIn(document);
+    const listed = !!popup.keys && /Turn a quarter turn/.test(popup.keys.textContent);
+    report(popup.open && !reached && listed, '? shows every key over the popup, without reaching the page', !popup.open ? 'Shift closed the popup' : reached ? 'the page got the key' : 'no keys showed');
+    pressReaches('?');
+    popup = popupIn(document);
+    report(popup.open && !popup.keys, '? again hides them');
+    await away(document);
+  }
+
+  // With "Show keys under the popup" off, there's no line of keys. Only with ?standalone, where the checks stand
+  // in for the background script's settings.
+  async function checkKeysSetting() {
+    const el = document.querySelector('.case .target');
+    const settle = async (settings) => {
+      window.standaloneSettings = settings;
+      browser.storage.onChanged.listeners.forEach((listener) => listener({ options: {} }, 'local'));
+      await wait(50);
+    };
+    await away(document);
+    await settle({ keysUnder: false });
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    const popup = popupIn(document);
+    report(popup.open && !popup.hint, 'with "Show keys under the popup" off, no line of keys', `"${popup.hint}"`);
+    await away(document);
+    await settle(null);
   }
 
   async function run() {
@@ -412,6 +444,8 @@
     await checkTypingInComponent();
     await checkActualSize();
     await checkTurn();
+    await checkKeys();
+    if (standalone) await checkKeysSetting();
     if (standalone) await checkSaveKey();
     if (standalone) await checkOpenAndCopy();
     const failed = lines.filter((line) => !line.ok).length;
