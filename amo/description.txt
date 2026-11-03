@@ -4,13 +4,13 @@ Largitude shows the full-size version of an image when you rest the mouse on it:
 • Knows where many sites keep the original uploads, so you see the full image rather than the page's smaller copy: Reddit, X, Bluesky, Imgur, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr, and any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google.
 • Galleries: on a Reddit gallery, or an X or Bluesky post with several images, the arrow keys or the mouse wheel move through them, with a counter showing where you are.
 • Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses.
-• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies its address, Z shows an image at its actual size, the mouse moving around it, R turns it a quarter turn, and ? lists them all. A line under the popup shows the keys for what it shows, until you turn it off.
+• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies the image and Shift+C its address, Z shows an image at its actual size, the mouse moving around it, R turns it a quarter turn, F flips it, and ? lists them all. A line under the popup shows the keys for what it shows, until you turn it off.
 • YouTube: a video's largest still, for its thumbnails and links to it on other sites.
 • Sees through the transparent layers many sites put over their images, and into web components.
 • Opens at its final size right away, with the thumbnail standing in while the full image loads.
 • Stays out of the way: the mouse goes right through it, it skips images already at full size and small icons, and a click, Escape or scrolling closes it.
 • Turn it off on a site with its toolbar button.
-• Settings: sites to leave alone, the line of keys under the popup, and which way the wheel moves through a gallery. Changes apply at once.
+• Settings: sites to leave alone, how long to wait before showing, the line of keys under the popup, and which way the wheel moves through a gallery. Changes apply at once, and follow you to your other computers if you sync add-ons with Firefox Sync.
 
 Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those.
 

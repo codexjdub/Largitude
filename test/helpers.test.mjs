@@ -9,6 +9,7 @@ const context = vm.createContext({ URL });
 vm.runInContext(readFileSync(new URL('../extension/helpers.js', import.meta.url), 'utf8'), context, { filename: 'helpers.js' });
 const {
   hostOf,
+  entriesOf,
   isExcluded,
   pageHostOf,
   listWithSite,
@@ -25,6 +26,10 @@ const {
   isWorthShowing,
   unturnedBox,
   turnInPlace,
+  viewTransform,
+  turnsOnceFlipped,
+  isPngData,
+  hoverDelayOf,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -339,4 +344,53 @@ test('turnInPlace shrinks the popup to fit the window, and moves it only to stay
   // With room kept below for the line of keys.
   const low = turnInPlace({ left: 100, top: 500, width: 400, height: 292 }, 1, view, 32);
   assert.ok(low.top + low.height + 32 <= 800 - 8);
+});
+
+test('hoverDelayOf gives the wait for each choice, and the usual one for anything else', () => {
+  assert.equal(hoverDelayOf('short'), 100);
+  assert.equal(hoverDelayOf('normal'), 300);
+  assert.equal(hoverDelayOf('long'), 700);
+  for (const other of [undefined, '', 'slow', 'constructor', 500]) assert.equal(hoverDelayOf(other), 300);
+});
+
+test('viewTransform mirrors first, then turns', () => {
+  assert.equal(viewTransform(0, false), 'none');
+  assert.equal(viewTransform(1, false), 'rotate(0.25turn)');
+  assert.equal(viewTransform(0, true), 'scaleX(-1)');
+  // CSS applies the last step first.
+  assert.equal(viewTransform(3, true), 'rotate(0.75turn) scaleX(-1)');
+});
+
+test('turnsOnceFlipped mirrors what is shown left to right on the screen, however it was turned', () => {
+  // What viewTransform shows, as a matrix on the screen (y down, so a positive angle turns clockwise).
+  const times = (a, b) =>
+    [a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3]].map((n) => n || 0);
+  const turn = (quarters) => [[1, 0, 0, 1], [0, -1, 1, 0], [-1, 0, 0, -1], [0, 1, -1, 0]][quarters];
+  const mirror = [-1, 0, 0, 1];
+  const shown = (turns, flipped) => (flipped ? times(turn(turns), mirror) : turn(turns));
+  for (const flipped of [false, true]) {
+    for (let turns = 0; turns < 4; turns++) {
+      // F mirrors the screen's view, and R then still turns it clockwise on the screen.
+      assert.deepEqual(shown(turnsOnceFlipped(turns), !flipped), times(mirror, shown(turns, flipped)));
+      assert.deepEqual(shown((turnsOnceFlipped(turns) + 1) % 4, !flipped), times(turn(1), times(mirror, shown(turns, flipped))));
+    }
+  }
+});
+
+test('entriesOf reads a list of sites one per line, or separated by spaces or commas', () => {
+  assert.deepEqual(plain(entriesOf(' example.com,news.example.org\n\nhttps://other.net/page  *.wiki.org ')), [
+    'example.com',
+    'news.example.org',
+    'https://other.net/page',
+    '*.wiki.org',
+  ]);
+  assert.deepEqual(plain(entriesOf('')), []);
+  assert.deepEqual(plain(entriesOf(undefined)), []);
+});
+
+test("isPngData knows a PNG by its first bytes, whatever it's called", () => {
+  assert.equal(isPngData(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0])), true);
+  // A JPEG, and a file too short to tell.
+  assert.equal(isPngData(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])), false);
+  assert.equal(isPngData(Uint8Array.from([0x89, 0x50])), false);
 });

@@ -15,8 +15,14 @@ function hostOf(entry) {
     .replace(/^\*\./, '');
 }
 
-// Whether the page at `url` is on a site in the list (one per line, or separated by spaces or commas).
-// A site includes its subdomains.
+// The entries of a list of sites, as typed: one per line, or separated by spaces or commas.
+function entriesOf(list) {
+  return String(list || '')
+    .split(/[\s,]+/)
+    .filter(Boolean);
+}
+
+// Whether the page at `url` is on a site in the list. A site includes its subdomains.
 function isExcluded(list, url) {
   let host = '';
   try {
@@ -25,8 +31,7 @@ function isExcluded(list, url) {
     return false;
   }
   if (!host) return false;
-  return String(list || '')
-    .split(/[\s,]+/)
+  return entriesOf(list)
     .map(hostOf)
     .filter(Boolean)
     .some((site) => host === site || host.endsWith('.' + site));
@@ -55,9 +60,8 @@ function listWithSite(list, url) {
 // The list without the entries that leave the page at `url` alone, one entry per line: the toolbar button,
 // clicked again, turns Largitude back on there.
 function listWithoutSite(list, url) {
-  return String(list || '')
-    .split(/[\s,]+/)
-    .filter((entry) => entry && !isExcluded(entry, url))
+  return entriesOf(list)
+    .filter((entry) => !isExcluded(entry, url))
     .join('\n');
 }
 
@@ -305,4 +309,34 @@ function unturnedBox(box, turns) {
     width: box.height,
     height: box.width,
   };
+}
+
+// The CSS transform that shows an image or video turned `turns` quarter turns clockwise and, if `flipped`,
+// mirrored left to right: mirrored first, then turned.
+function viewTransform(turns, flipped) {
+  const steps = [];
+  if (turns) steps.push(`rotate(${turns / 4}turn)`);
+  if (flipped) steps.push('scaleX(-1)');
+  return steps.join(' ') || 'none';
+}
+
+// The quarter turns once F has mirrored what's shown left to right on the screen. The image is mirrored before
+// it's turned (viewTransform), and mirroring reverses a turn: an image turned a quarter turn clockwise, mirrored,
+// is the mirrored image turned a quarter turn the other way.
+function turnsOnceFlipped(turns) {
+  return (4 - turns) % 4;
+}
+
+// Whether `bytes`, the first bytes of a file, are a PNG's: the eight that every PNG starts with.
+function isPngData(bytes) {
+  return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => bytes[i] === byte);
+}
+
+// ---- Settings ----
+
+// How long, in ms, the pointer rests on an image before the popup opens, for the "Wait before showing" setting.
+// Anything else, such as a choice from a later version synced from another computer, waits the usual time.
+function hoverDelayOf(choice) {
+  const delays = { short: 100, normal: 300, long: 700 };
+  return Object.hasOwn(delays, choice) ? delays[choice] : delays.normal;
 }

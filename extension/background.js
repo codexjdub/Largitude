@@ -1,21 +1,40 @@
 // Largitude's background script: gives each frame the settings that apply to it, saves the image the popup
-// shows when the user presses S or opens it in a tab for O, and runs the toolbar button. Later it will also fetch the pages and JSON some
-// site rules need, such as a Reddit post's, which a content script can only read from its own page's site.
+// shows when the user presses S, opens it in a tab for O or fetches it for C where the popup can't read it, and
+// runs the toolbar button.
 //
-// DEFAULT_OPTIONS comes from defaults.js; isExcluded, pageHostOf, listWithSite and listWithoutSite from
-// helpers.js, both loaded first.
+// isExcluded, pageHostOf, listWithSite, listWithoutSite and hoverDelayOf come from helpers.js; DEFAULT_OPTIONS,
+// readOptions, optionsFrom and saveOptions from settings.js, both loaded first.
 
-async function loadOptions() {
+// Until 0.8.0, the settings were kept on this computer only. The first time a later version runs, they move to
+// the synced storage: this computer's sites to leave alone go after any another computer has synced there
+// already, whose other choices are kept. Until the move is done, readOptions reads them where they were.
+async function moveToSync() {
   const { options } = await browser.storage.local.get('options');
-  return { ...DEFAULT_OPTIONS, ...options };
+  if (!options) return;
+  const stored = await browser.storage.sync.get(null);
+  const synced = optionsFrom(stored);
+  const moved = stored.options
+    ? { ...synced, excluded: synced.excluded + '\n' + (options.excluded || '') }
+    : { ...DEFAULT_OPTIONS, ...options };
+  await saveOptions(moved);
+  await browser.storage.local.remove('options');
+}
+
+const moving = moveToSync().catch(() => {});
+
+// The settings, once any from before 0.8.0 have moved.
+async function loadOptions() {
+  await moving;
+  return readOptions();
 }
 
 async function settingsFor(sender) {
-  const { excluded, galleryWheelReversed, keysUnderPopup } = await loadOptions();
+  const { excluded, hoverDelay, galleryWheelReversed, keysUnderPopup } = await loadOptions();
   return {
     // The tab's page counts as well as the frame's own address, so a frame embedded on a site to leave alone is
     // left alone too.
     excluded: [sender.tab && sender.tab.url, sender.url].some((url) => !!url && isExcluded(excluded, url)),
+    delay: hoverDelayOf(hoverDelay),
     reverseWheel: !!galleryWheelReversed,
     keysUnder: !!keysUnderPopup,
   };
@@ -45,10 +64,25 @@ async function openTab(message, sender) {
   }
 }
 
+// C, where the popup can't read the image it shows: the image's file, which the background script can fetch from
+// any site. Without cookies and kept out of the cache, which is the normal window's: an image copied in a private
+// window would otherwise stay there.
+async function imageFile(message) {
+  if (typeof message.url !== 'string' || !/^https?:/i.test(message.url)) return null;
+  try {
+    const response = await fetch(message.url, { cache: 'no-store', credentials: 'omit' });
+    if (!response.ok) return null;
+    return { type: response.headers.get('content-type') || '', bytes: await response.arrayBuffer() };
+  } catch (err) {
+    return null;
+  }
+}
+
 browser.runtime.onMessage.addListener((message, sender) => {
   if (message && message.type === 'settings') return settingsFor(sender);
   if (message && message.type === 'save') return save(message, sender);
   if (message && message.type === 'open') return openTab(message, sender);
+  if (message && message.type === 'image') return imageFile(message);
   return undefined;
 });
 
@@ -63,7 +97,15 @@ browser.action.onClicked.addListener(async (tab) => {
   const excluded = isExcluded(options.excluded, tab.url)
     ? listWithoutSite(options.excluded, tab.url)
     : listWithSite(options.excluded, tab.url);
-  await browser.storage.local.set({ options: { ...options, excluded } });
+  try {
+    await saveOptions({ ...options, excluded });
+  } catch (err) {
+    // As when Firefox's limit of synced items is reached: the button says so on this tab.
+    await Promise.all([
+      browser.action.setBadgeText({ tabId: tab.id, text: '!' }),
+      browser.action.setTitle({ tabId: tab.id, title: "Largitude couldn't save the change" }),
+    ]).catch(() => {});
+  }
 });
 
 // The button shows "off" on a tab whose site is left alone, and says what a click will do. On pages Largitude
@@ -81,18 +123,28 @@ function showState(tab, excluded) {
   return Promise.all(calls).catch(() => {});
 }
 
+// The sites to leave alone, kept for the button's state on each tab's every change, and read again when the
+// settings change.
+let excludedNow = null;
+
 async function showAllStates() {
   const [{ excluded }, tabs] = await Promise.all([loadOptions(), browser.tabs.query({})]);
+  excludedNow = excluded;
   await Promise.all(tabs.map((tab) => showState(tab, excluded)));
 }
 
 browser.action.setBadgeBackgroundColor({ color: '#5d6066' });
 browser.tabs.onUpdated.addListener(
-  async (tabId, change, tab) => showState(tab, (await loadOptions()).excluded),
+  async (tabId, change, tab) => {
+    if (excludedNow === null) excludedNow = (await loadOptions()).excluded;
+    return showState(tab, excludedNow);
+  },
   { properties: ['url', 'status'] }
 );
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.options) showAllStates();
+  if (area !== 'sync') return;
+  excludedNow = null;
+  showAllStates();
 });
 browser.runtime.onStartup.addListener(showAllStates);
 browser.runtime.onInstalled.addListener(showAllStates);

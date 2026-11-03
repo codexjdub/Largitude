@@ -15,9 +15,11 @@ While it's open:
 | ← → or the mouse wheel | Move through a gallery |
 | S | Save the image or video |
 | O | Open it in a new tab |
-| C | Copy its address |
+| C | Copy the image |
+| Shift+C | Copy the image's or video's address |
 | Z | Show the image at its actual size, filling the window; move the mouse to look around it, and press Z again to go back |
 | R | Turn the image or video a quarter turn clockwise |
+| F | Flip the image or video left to right |
 | M | Turn a video's sound on or off |
 | Space | Pause or play a video |
 | ? | Show every key over the popup, and hide them again |
@@ -45,10 +47,11 @@ To turn Largitude off on a site, click its button in the toolbar while you're on
 Largitude's settings are on its page in Firefox's **Add-ons and themes** (`about:addons`):
 
 - **Sites to leave alone**: one per line, such as `example.com` or a page's address copied from the address bar. Largitude does nothing there, subdomains included. The toolbar button adds sites here and takes them off.
+- **Wait before showing**: how long the mouse rests on an image before the popup opens. Short, Normal or Long.
 - **Show keys under the popup**: the line of keys under each popup. On at first. The settings page also lists every key.
 - **Reverse the mouse wheel in galleries**: scrolling down shows the previous image instead of the next.
 
-Changes apply at once, on pages already open too.
+Changes apply at once, on pages already open too. If you sync add-ons with Firefox Sync, your settings follow you to your other computers.
 
 ## Limits
 
@@ -60,7 +63,7 @@ Coming next: more image hosts.
 
 ## Privacy and permissions
 
-Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those.
+Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those. Its settings, including the sites to leave alone, go to your other computers through Firefox Sync if you sync add-ons there; Firefox encrypts them so that only your devices can read them.
 
 Firefox asks for two permissions when you install it:
 

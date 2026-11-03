@@ -1,11 +1,12 @@
 // "Run checks" on the test page: hovers each card with synthetic mouse events, which Largitude's content script
 // receives like real ones, and lists what the popup showed. The results also go to window.largitudeChecks.
 (() => {
-  const DELAY = 300; // Largitude's hover delay, in content.js
+  const DELAY = 300; // Largitude's hover delay, with "Wait before showing" at Normal
   const WHEEL_SETTLE = 150; // its pause that ends a wheel gesture
   // The wheel turned for the next image: the way that scrolls the page down.
   const NEXT = 120;
   const REVERSED = 'if "Reverse the mouse wheel in galleries" is on in Largitude\'s settings, turn it off for the checks';
+  const WAIT = 'if "Wait before showing" isn\'t Normal in Largitude\'s settings, set it to Normal for the checks';
   const standalone = new URLSearchParams(location.search).has('standalone');
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const results = document.getElementById('results');
@@ -143,11 +144,11 @@
   }
 
   // Whether a key pressed with the popup open reaches the page.
-  function pressReaches(key) {
+  function pressReaches(key, modifiers = {}) {
     let reached = false;
     const listener = () => (reached = true);
     document.addEventListener('keydown', listener);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers }));
     document.removeEventListener('keydown', listener);
     return reached;
   }
@@ -165,8 +166,10 @@
     await away(document);
   }
 
-  // O opens the image in a new tab and C copies its address. Only with ?standalone, like S: there's no
-  // background script to open a tab, so the popup says it couldn't, and the clipboard is stood in for.
+  // O opens the image in a new tab, C copies the image and Shift+C its address. Only with ?standalone, like S:
+  // there's no background script to open a tab, so the popup says it couldn't, and the clipboard is stood in for.
+  // C copies the popup's own image, or where a canvas can't read it, the file the background script fetches, stood
+  // in for by a JPEG drawn from the popup's image and labeled as a PNG.
   async function checkOpenAndCopy() {
     const el = document.querySelector('.case .target');
     await away(document);
@@ -179,11 +182,47 @@
     navigator.clipboard.writeText = async (text) => {
       copied = text;
     };
-    reached = pressReaches('c');
-    const noted = await until(() => /copied/i.test(popupIn(document).note || ''), 1000);
+    reached = pressReaches('C', { shiftKey: true });
+    let noted = await until(() => /address copied/i.test(popupIn(document).note || ''), 1000);
     delete navigator.clipboard.writeText;
-    const why = reached ? 'the page got the key' : `copied "${copied}", note "${popupIn(document).note}"`;
-    report(!reached && noted && /full-1600x1200\.svg$/.test(copied), 'C copies the full-size address, without reaching the page', why);
+    let why = reached ? 'the page got the key' : `copied "${copied}", note "${popupIn(document).note}"`;
+    report(!reached && noted && /full-1600x1200\.svg$/.test(copied), 'Shift+C copies the full-size address, without reaching the page', why);
+
+    let image = null;
+    navigator.clipboard.write = async (items) => {
+      image = await items[0].getType('image/png');
+    };
+    // What C put on the clipboard: a PNG, by its first bytes, and its size.
+    const copy = async (key) => {
+      image = null;
+      const kept = !pressReaches(key);
+      await until(() => image, 2000);
+      if (!image) return { kept, what: 'nothing' };
+      const png = isPngData(new Uint8Array(await image.slice(0, 8).arrayBuffer()));
+      const size = await createImageBitmap(image).then((bitmap) => `${bitmap.width}×${bitmap.height}`, () => 'unreadable');
+      return { kept, what: `${png ? 'a PNG' : 'not a PNG'} ${size}` };
+    };
+    let result = await copy('c');
+    noted = await until(() => /image copied/i.test(popupIn(document).note || ''), 1000);
+    why = `${result.kept ? '' : 'the page got the key, '}copied ${result.what}, note "${popupIn(document).note}"`;
+    report(result.kept && noted && result.what === 'a PNG 1600×1200', "C copies the popup's image as a PNG, without reaching the page", why);
+
+    const canvas = document.createElement('canvas');
+    [canvas.width, canvas.height] = [160, 120];
+    canvas.getContext('2d').drawImage(popupIn(document).full, 0, 0, 160, 120);
+    const jpeg = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg'));
+    window.standaloneImage = async () => ({ type: 'image/png', bytes: await jpeg.arrayBuffer() });
+    // The popup's canvas can't be read once, as for another site's image where Firefox doesn't allow it.
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function () {
+      HTMLCanvasElement.prototype.toBlob = toBlob;
+      throw new DOMException('The canvas has been tainted', 'SecurityError');
+    };
+    result = await copy('c');
+    HTMLCanvasElement.prototype.toBlob = toBlob;
+    delete window.standaloneImage;
+    delete navigator.clipboard.write;
+    report(result.what === 'a PNG 160×120', "where the popup's image can't be read, C copies the fetched file, made a PNG by its bytes, not its label", `copied ${result.what}`);
     await away(document);
   }
 
@@ -257,6 +296,30 @@
     await away(document);
   }
 
+  // F mirrors the image left to right, keeping the popup where it is; after F, R still turns it clockwise on the
+  // screen (the unit tests check the turns that takes), and F and R again bring it back.
+  async function checkFlip() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    const upright = popupIn(document).box;
+    const same = (box) => ['left', 'top', 'width', 'height'].every((side) => Math.abs(box[side] - upright[side]) < 1);
+    const transform = () => popupIn(document).full.style.transform;
+    const reached = pressReaches('f');
+    let popup = popupIn(document);
+    report(!reached && popup.open && same(popup.box) && transform() === 'scaleX(-1)', 'F flips the image left to right, the popup staying where it is, without reaching the page', `box ${JSON.stringify(popup.box)}, ${transform()}`);
+    const steps = [];
+    for (const key of ['r', 'f', 'r']) {
+      pressReaches(key);
+      steps.push(transform());
+    }
+    popup = popupIn(document);
+    const expected = ['rotate(0.25turn) scaleX(-1)', 'rotate(0.75turn)', 'none'];
+    report(popup.open && same(popup.box) && steps.join() === expected.join(), 'after F, R turns it; F and R again bring it back as it was', `${steps.join(' → ')}, box ${JSON.stringify(popup.box)}`);
+    await away(document);
+  }
+
   // A key typed in a web component's text box goes to the box, even with a gallery's popup open: the page sees the
   // key as coming from the component, so Largitude has to look for the focus inside it.
   async function checkTypingInComponent() {
@@ -310,6 +373,8 @@
     const mReached = pressReaches('m');
     const sound = await until(() => /sound/i.test(popupIn(document).note || ''), 1000);
     report(!mReached && sound, name + ': M turns the sound on or off, or says there is none', mReached ? 'the page got the key' : 'no note showed');
+
+    report(pressReaches('c'), name + ": C is left to the page, since a video can't be copied");
 
     const spaceReached = pressReaches(' ');
     const paused = await until(() => video.paused, 1000);
@@ -371,7 +436,7 @@
     await away(document);
     let point = await hover(document, el);
     await wait(DELAY / 2);
-    report(!isOpen(), 'waits for the pointer to rest before opening');
+    report(!isOpen(), 'waits for the pointer to rest before opening', WAIT);
     report(!!(await until(isOpen, 3000)), 'opens once the pointer has rested');
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -422,21 +487,38 @@
     await away(document);
   }
 
-  // With "Show keys under the popup" off, there's no line of keys. Only with ?standalone, where the checks stand
-  // in for the background script's settings.
+  // Only with ?standalone, where the checks stand in for the background script's settings: sets them, and tells
+  // Largitude they changed.
+  async function settle(settings) {
+    window.standaloneSettings = settings;
+    browser.storage.onChanged.listeners.forEach((listener) => listener({ options: {} }, 'sync'));
+    await wait(50);
+  }
+
+  // With "Show keys under the popup" off, there's no line of keys.
   async function checkKeysSetting() {
     const el = document.querySelector('.case .target');
-    const settle = async (settings) => {
-      window.standaloneSettings = settings;
-      browser.storage.onChanged.listeners.forEach((listener) => listener({ options: {} }, 'local'));
-      await wait(50);
-    };
     await away(document);
     await settle({ keysUnder: false });
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
     const popup = popupIn(document);
     report(popup.open && !popup.hint, 'with "Show keys under the popup" off, no line of keys', `"${popup.hint}"`);
+    await away(document);
+    await settle(null);
+  }
+
+  // With "Wait before showing" at Long, the popup waits 700 ms rather than 300.
+  async function checkDelaySetting() {
+    const el = document.querySelector('.case .target');
+    const isOpen = () => popupIn(document).open;
+    await away(document);
+    await settle({ delay: 700 });
+    await hover(document, el);
+    await wait(450);
+    const early = isOpen();
+    const opened = await until(isOpen, 3000);
+    report(!early && opened, 'with "Wait before showing" at Long, the popup waits longer', `open at 450 ms ${early}, then ${!!opened}`);
     await away(document);
     await settle(null);
   }
@@ -453,8 +535,10 @@
     await checkTypingInComponent();
     await checkActualSize();
     await checkTurn();
+    await checkFlip();
     await checkKeys();
     if (standalone) await checkKeysSetting();
+    if (standalone) await checkDelaySetting();
     if (standalone) await checkSaveKey();
     if (standalone) await checkOpenAndCopy();
     const failed = lines.filter((line) => !line.ok).length;

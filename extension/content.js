@@ -13,7 +13,7 @@
   // Web pages only: SVG and XML documents have no popovers to show the popup in.
   if (!root || typeof root.showPopover !== 'function') return;
 
-  const DELAY = 300; // ms the pointer rests on an image before the popup opens
+  const DELAY = hoverDelayOf('normal'); // ms the pointer rests on an image before the popup opens, unless set
   const SPINNER_AFTER = 150; // ms an image may take to start arriving before a spinner shows
   const MIN_SIZE = 24; // px: smaller images, such as icons and emoji, are left alone
   const MAX_LAYERS = 8; // elements under the pointer looked through for an image
@@ -23,6 +23,7 @@
   const HINT_ROOM = 32; // px kept under the popup for the line of keys: its 26 and the 6 between them
 
   let enabled = false;
+  let delay = DELAY; // the "Wait before showing" setting
   let reverseWheel = false; // the "Reverse the mouse wheel in galleries" setting
   let keysUnder = true; // the "Show keys under the popup" setting
   let pointer = { x: 0, y: 0 };
@@ -319,7 +320,8 @@
   let toast = null;
   let toastTimer = 0;
   let actualSize = null; // with Z, the popup's box from before it showed the image at its actual size
-  let turns = 0; // the quarter turns clockwise R has given the image or video shown
+  let turns = 0; // the quarter turns clockwise the image or video shown is turned (R), once mirrored (F)
+  let flipped = false; // whether F has mirrored the image or video shown left to right
   let uprightBox = null; // the popup's box before R turned it
   let keysOpen = false;
 
@@ -333,9 +335,11 @@
     ['← →', 'Move through a gallery'],
     ['S', 'Save'],
     ['O', 'Open in a new tab'],
-    ['C', 'Copy the address'],
+    ['C', 'Copy the image'],
+    ['Shift C', 'Copy the address'],
     ['Z', 'Actual size'],
     ['R', 'Turn a quarter turn'],
+    ['F', 'Flip left to right'],
     ['M', 'Sound on or off (video)'],
     ['Space', 'Pause (video)'],
     ['?', 'Show or hide these keys'],
@@ -587,6 +591,7 @@
     spinnerTimer = 0;
     actualSize = null;
     turns = 0;
+    flipped = false;
     uprightBox = null;
     if (!host) createHost();
     spinner.style.display = 'none';
@@ -695,6 +700,7 @@
     shown = false;
     actualSize = null;
     turns = 0;
+    flipped = false;
     uprightBox = null;
     keysOpen = false;
     listenToWheel(false);
@@ -916,8 +922,20 @@
     fitToPopup(box);
   }
 
-  // The image or video shown, turned as R left it, covering `box`: a box in the popup, which at actual size is
-  // the whole window.
+  // F mirrors the image or video left to right as it's seen, after R too (turnsOnceFlipped). The popup keeps its
+  // shape and place. Like R, it changes only the view, and the next image starts as it is.
+  function flip() {
+    if (!shown || !full) return;
+    flipped = !flipped;
+    turns = turnsOnceFlipped(turns);
+    // The thumbnail standing in for the full image doesn't flip with it.
+    thumbImg.style.display = 'none';
+    if (actualSize) lookAround();
+    else fitToPopup(host.getBoundingClientRect());
+  }
+
+  // The image or video shown, turned and mirrored as R and F left it, covering `box`: a box in the popup, which at
+  // actual size is the whole window.
   function fitTurned(box) {
     const unturned = unturnedBox(box, turns);
     setStyles(full, {
@@ -925,13 +943,13 @@
       top: unturned.top + 'px',
       width: unturned.width + 'px',
       height: unturned.height + 'px',
-      transform: turns ? `rotate(${turns / 4}turn)` : 'none',
+      transform: viewTransform(turns, flipped),
     });
   }
 
   // The image or video shown, filling the popup placed at `box`.
   function fitToPopup(box) {
-    if (turns) fitTurned({ left: 0, top: 0, width: box.width, height: box.height });
+    if (turns || flipped) fitTurned({ left: 0, top: 0, width: box.width, height: box.height });
     else setStyles(full, FILL);
   }
 
@@ -1016,8 +1034,56 @@
     if (!opened) note("Couldn't open it");
   }
 
-  // C: the full-size image or video's address, on the clipboard. Firefox allows it while a key is being pressed,
-  // on https pages.
+  // C: the image itself, on the clipboard, as a PNG, the one kind of image Firefox puts there. Firefox allows the
+  // clipboard only while a key is being pressed, on https pages, so the clipboard is handed the PNG to come.
+  async function copyImage() {
+    if (!shown || !full || isVideo(full)) return;
+    const png = pngOf(full);
+    png.catch(() => {}); // the clipboard says it failed
+    note('Copying…');
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      note('Image copied');
+    } catch (err) {
+      note("Couldn't copy the image");
+    }
+  }
+
+  // The popup's image as a PNG, drawn from the popup's own copy, so it's the image as shown, with nothing fetched
+  // again. A canvas holding another site's image can't be read by the page, but Firefox lets an extension that may
+  // read every site read it. Where it can't, the background script fetches the file, and anything but a PNG, by
+  // its first bytes, is drawn into one.
+  async function pngOf(img) {
+    try {
+      return await canvasPng(img, img.naturalWidth, img.naturalHeight);
+    } catch (err) {
+      // Not readable here: fetched instead.
+    }
+    const file = await browser.runtime.sendMessage({ type: 'image', url: img.currentSrc || img.src });
+    if (!file) throw new Error("Couldn't fetch the image");
+    if (isPngData(new Uint8Array(file.bytes, 0, Math.min(8, file.bytes.byteLength)))) {
+      return new Blob([file.bytes], { type: 'image/png' });
+    }
+    const bitmap = await createImageBitmap(new Blob([file.bytes]));
+    try {
+      return await canvasPng(bitmap, bitmap.width, bitmap.height);
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  // `image` drawn at `width` × `height` and saved as a PNG; it fails where the canvas can't be read.
+  function canvasPng(image, width, height) {
+    return new Promise((resolve, reject) => {
+      const canvas = make('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No PNG'))), 'image/png');
+    });
+  }
+
+  // Shift+C: the full-size image or video's address, on the clipboard.
   async function copyAddress() {
     if (!shown || !full) return;
     try {
@@ -1072,7 +1138,7 @@
     if (hovered || shown) hide();
     if (!found) return;
     hovered = found;
-    timer = setTimeout(open, DELAY);
+    timer = setTimeout(open, delay);
   }
 
   function onMove(event) {
@@ -1108,10 +1174,10 @@
   document.addEventListener('visibilitychange', () => document.hidden && hide());
   // Leaving the window (or entering a frame in it).
   document.addEventListener('mouseout', (event) => !event.relatedTarget && (hovered || shown) && hide(), passive);
-  // Escape closes the popup, ← → move through a gallery, S saves, O opens in a new tab, C copies the address, Z
-  // shows the actual size, R turns the image, ? lists the keys, and for a video M turns the sound on or off and
-  // Space pauses, without the keys also reaching the page, which might close a dialog, move a carousel, scroll or
-  // have shortcuts of its own.
+  // Escape closes the popup, ← → move through a gallery, S saves, O opens in a new tab, C copies the image and
+  // Shift+C the address, Z shows the actual size, R turns the image, F flips it, ? lists the keys, and for a video
+  // M turns the sound on or off and Space pauses, without the keys also reaching the page, which might close a
+  // dialog, move a carousel, scroll or have shortcuts of its own.
   window.addEventListener(
     'keydown',
     (event) => {
@@ -1124,7 +1190,10 @@
       if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping()) return;
       const step = gallery ? { ArrowRight: 1, ArrowLeft: -1 }[event.key] : 0;
       const video = isVideo(full) ? full : null;
-      const actions = { s: save, o: openInTab, c: copyAddress, z: toggleActualSize, r: turn, '?': toggleKeys };
+      const actions = { s: save, o: openInTab, z: toggleActualSize, r: turn, f: flip, '?': toggleKeys };
+      // A video can't go on the clipboard, so C is left to the page there.
+      if (event.shiftKey) actions.c = copyAddress;
+      else if (!video) actions.c = copyImage;
       if (video) Object.assign(actions, { m: () => toggleSound(video), ' ': () => togglePause(video) });
       const action = actions[event.key.toLowerCase()];
       if (!step && !action) return;
@@ -1138,9 +1207,9 @@
 
   // ---- Settings ----
 
-  // Whether this site is one to leave alone, which way the wheel goes and whether keys show under the popup, from
-  // the background script. With no answer, as when it isn't up yet, Largitude works with the defaults rather than
-  // stay off for good.
+  // Whether this site is one to leave alone, how long to wait, which way the wheel goes and whether keys show under
+  // the popup, from the background script. With no answer, as when it isn't up yet, Largitude works with the
+  // defaults rather than stay off for good.
   async function loadSettings() {
     let settings = null;
     try {
@@ -1149,13 +1218,14 @@
       settings = null;
     }
     enabled = !(settings && settings.excluded);
+    delay = (settings && settings.delay) || DELAY;
     reverseWheel = !!(settings && settings.reverseWheel);
     keysUnder = !(settings && settings.keysUnder === false);
     if (!enabled) hide();
   }
 
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.options) loadSettings();
+    if (area === 'sync') loadSettings();
   });
   loadSettings();
 })();
