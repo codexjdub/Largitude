@@ -27,7 +27,7 @@ test('each site has a name, [find, replace] rules and, optionally, a gallery', (
       assert.ok(!find.global && !find.sticky, `${site.name}: ${find}`);
       assert.ok(typeof replace === 'string' || typeof replace === 'function', `${site.name}: ${find}`);
     }
-    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video']) {
+    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video', 'original']) {
       assert.ok(site[hook] === undefined || typeof site[hook] === 'function', `${site.name}: ${hook}`);
     }
   }
@@ -339,4 +339,27 @@ test("Giphy: a GIF's copy or still leads to its video", () => {
 test('other sites are left alone', () => {
   assert.deepEqual(plain(fullSizeUrls('https://example.com/photo.jpg?name=small')), []);
   assert.deepEqual(plain(fullSizeUrls('not a url')), []);
+});
+
+test("Google Images: a result's original, from the page's scripts", () => {
+  const google = SITES.find((site) => site.name === 'Google Images');
+  // As Google's page lists a result, in a script of several hundred kilobytes.
+  const listing =
+    'var m={"nV7paoT":[1,[0,"Y9jcXztxNgSz8M",["https://encrypted-tbn0.gstatic.com/images?q\\u003dtbn:ANd9GcQ\\u0026s\\u003d10",447,447],' +
+    '["https://mountainhouse.com/cdn/shop/articles/lake_1024x.jpg?v\\u003d1766161643",1024,1024],null,0,"rgb(112,166,208)"]]};';
+  const page = (href, texts) => ({ location: { href }, scripts: texts.map((textContent) => ({ textContent })) });
+  // An image in the result with `id`, or in no result.
+  const image = (doc, id) => ({ ownerDocument: doc, closest: () => (id ? { getAttribute: () => id } : null) });
+  const search = page('https://www.google.com/search?q=mountain+lake&udm=2', ['google.kEXPI="0,1";', listing]);
+  assert.equal(google.original(image(search, 'Y9jcXztxNgSz8M')), 'https://mountainhouse.com/cdn/shop/articles/lake_1024x.jpg?v=1766161643');
+  // A result loaded while scrolling, which the scripts don't list, and an image outside the results.
+  assert.equal(google.original(image(search, 'c_auKTKZbHSCMM')), '');
+  assert.equal(google.original(image(search, null)), '');
+  // Google's other countries; other pages, which may list the same thing, are left alone.
+  assert.equal(google.original(image(page('https://www.google.co.uk/search?q=lake', [listing]), 'Y9jcXztxNgSz8M')), 'https://mountainhouse.com/cdn/shop/articles/lake_1024x.jpg?v=1766161643');
+  assert.equal(google.original(image(page('https://example.com/search?q=lake', [listing]), 'Y9jcXztxNgSz8M')), '');
+  assert.equal(google.original(image(page('https://www.google.com/maps', [listing]), 'Y9jcXztxNgSz8M')), '');
+  // Scripts added later are read too.
+  search.scripts.push({ textContent: listing.replace('Y9jcXztxNgSz8M', 'c_auKTKZbHSCMM') });
+  assert.equal(google.original(image(search, 'c_auKTKZbHSCMM')), 'https://mountainhouse.com/cdn/shop/articles/lake_1024x.jpg?v=1766161643');
 });

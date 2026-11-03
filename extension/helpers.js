@@ -152,6 +152,8 @@ function hasFileType(url, extension) {
 //   video    optional, (el, page) → for a video the site streams, which can't be played anywhere else, when `el`
 //            is its <video> or the poster shown before it plays: { urls, poster }, files of the same video, best
 //            first, and its poster image's address
+//   original optional, (el) → the address of the original of the <img> `el`, when the page lists it somewhere
+//            other than the image's own address, as Google Images does in its scripts; '' when it doesn't
 // A var, like the function declarations here, so that it's a global the scripts loaded after this one see.
 var SITES = [];
 

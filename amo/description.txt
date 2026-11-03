@@ -5,6 +5,7 @@ Largitude shows the full-size version of an image when you rest the mouse on it:
 • Galleries: on a Reddit gallery, or an X or Bluesky post with several images, the arrow keys or the mouse wheel move through them, with a counter showing where you are.
 • Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses.
 • Keys while it's open: S saves the image or video, O opens it in a new tab, C copies the image and Shift+C its address, Z shows an image at its actual size, the mouse moving around it, R turns it a quarter turn, F flips it, and ? lists them all. A line under the popup shows the keys for what it shows, until you turn it off.
+• Google Images: the original image of each of the first 100 or so results.
 • YouTube: a video's largest still, for its thumbnails and links to it on other sites.
 • Sees through the transparent layers many sites put over their images, and into web components.
 • Opens at its final size right away, with the thumbnail standing in while the full image loads.

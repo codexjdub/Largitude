@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Largitude",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Hover over a thumbnail, a link to an image or a small video to see it full size, on any site.",
   "browser_specific_settings": {
     "gecko": {
@@ -32,6 +32,7 @@
         "sites/ebay.js",
         "sites/flickr.js",
         "sites/giphy.js",
+        "sites/google.js",
         "sites/imgur.js",
         "sites/pinterest.js",
         "sites/reddit.js",

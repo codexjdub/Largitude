@@ -119,9 +119,9 @@
     return { thumb: background, thumbSize: null, urls: withRules([linkedMedia(el), background]) };
   }
 
-  // The addresses to try for an <img>'s full size, best first: a link around it to an image file, the largest
-  // in its srcset, then what it shows. Lazy-loading pages keep the last two in data-lazy-src and
-  // data-lazy-srcset until the image comes into view.
+  // The addresses to try for an <img>'s full size, best first: an original the page lists elsewhere, a link
+  // around it to an image file, the largest in its srcset, then what it shows. Lazy-loading pages keep the last
+  // two in data-lazy-src and data-lazy-srcset until the image comes into view.
   function sourcesOf(img) {
     const lazy = img.getAttribute('data-lazy-src');
     const thumb = img.currentSrc || img.src || (lazy ? absolute(lazy, img) : '');
@@ -129,8 +129,18 @@
     return {
       thumb,
       thumbSize: img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null,
-      urls: withRules([linkedMedia(img), largest ? largest.url : '', thumb]),
+      urls: withRules([listedOriginal(img), linkedMedia(img), largest ? largest.url : '', thumb]),
     };
+  }
+
+  // The original of an <img> that the page lists somewhere other than its address, from the site rules, as
+  // Google Images does for its results.
+  function listedOriginal(img) {
+    for (const site of SITES) {
+      const found = site.original ? site.original(img) : '';
+      if (found) return found;
+    }
+    return '';
   }
 
   // A video the page plays from a file, which the popup plays again, bigger, with the page's poster as its own

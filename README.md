@@ -33,6 +33,7 @@ The mouse wheel moves through a gallery the way it scrolls the page: scrolling d
 
 - **On any site**, the largest version the page offers: the image file a thumbnail links to, the biggest of the sizes the page lists, or the image itself.
 - **On sites it knows**, the original upload, rather than the smaller copy the page shows: Reddit, X, Bluesky, Imgur, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr (at 1024 px, the largest it can find there). Also on any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google (Blogger, Google Play, YouTube profile pictures).
+- **Google Images**: the original image of each of the first 100 or so results, which Google's page lists; for results that load as you scroll, Google's larger thumbnail.
 - **YouTube videos**: the video's largest still, for its thumbnails and for links to it, on other sites. On YouTube itself, thumbnails are left to YouTube's own preview.
 - **Links to an Imgur image** (`imgur.com/…`): the image itself.
 - **Galleries**: a Reddit gallery, an X post with several photos or a Bluesky post with several images opens as a gallery, with a counter showing where you are.
