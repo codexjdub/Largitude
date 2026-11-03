@@ -11,7 +11,7 @@ const context = vm.createContext({ URL });
 for (const file of manifest.content_scripts[0].js.filter((file) => file !== 'content.js')) {
   vm.runInContext(readFileSync(new URL(file, extension), 'utf8'), context, { filename: file });
 }
-const { SITES, fullSizeUrls, isStandIn, isLeftAlone } = context;
+const { SITES, fullSizeUrls, isStandIn, isLeftAlone, fileNameFor } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -27,7 +27,7 @@ test('each site has a name, [find, replace] rules and, optionally, a gallery', (
       assert.ok(!find.global && !find.sticky, `${site.name}: ${find}`);
       assert.ok(typeof replace === 'string' || typeof replace === 'function', `${site.name}: ${find}`);
     }
-    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video', 'original']) {
+    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video', 'original', 'fileName']) {
       assert.ok(site[hook] === undefined || typeof site[hook] === 'function', `${site.name}: ${hook}`);
     }
   }
@@ -362,4 +362,15 @@ test("Google Images: a result's original, from the page's scripts", () => {
   // Scripts added later are read too.
   search.scripts.push({ textContent: listing.replace('Y9jcXztxNgSz8M', 'c_auKTKZbHSCMM') });
   assert.equal(google.original(image(search, 'c_auKTKZbHSCMM')), 'https://mountainhouse.com/cdn/shop/articles/lake_1024x.jpg?v=1766161643');
+});
+
+test("Reddit: a saved video is named after the video, not its size", () => {
+  assert.equal(
+    fileNameFor('https://packaged-media.redd.it/c9hjorqb31zh1/pb/m2-res_720p.mp4?m=DASHPlaylist.mpd&v=1&e=1793613600&s=0bcd'),
+    'c9hjorqb31zh1.mp4'
+  );
+  assert.equal(fileNameFor('https://v.redd.it/c9hjorqb31zh1/DASH_720.mp4?source=fallback'), 'c9hjorqb31zh1.mp4');
+  // Images, already named after their id, and other sites' videos go by their address.
+  assert.equal(fileNameFor('https://i.redd.it/abc123def.png'), 'abc123def.png');
+  assert.equal(fileNameFor('https://example.com/videos/clip-640x360.webm'), 'clip-640x360.webm');
 });

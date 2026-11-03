@@ -154,6 +154,8 @@ function hasFileType(url, extension) {
 //            first, and its poster image's address
 //   original optional, (el) → the address of the original of the <img> `el`, when the page lists it somewhere
 //            other than the image's own address, as Google Images does in its scripts; '' when it doesn't
+//   fileName optional, (url) → the name to save the file at `url` under, where the end of its address names it
+//            poorly, as Reddit's videos, all called after their size; '' to go by the address
 // A var, like the function declarations here, so that it's a global the scripts loaded after this one see.
 var SITES = [];
 
@@ -186,9 +188,9 @@ function isLeftAlone(url, pageUrl) {
   return SITES.some((site) => !!site.leaveAlone && site.leaveAlone(url, pageUrl));
 }
 
-// A file name to save the image at `url` under: the last part of its path, with the image's type added when the
-// address gives it elsewhere (X's ?format=jpg). Empty when there's nothing to go by, which leaves the name to
-// Firefox.
+// A file name to save the image or video at `url` under: the name a site rule gives it, or the last part of its
+// path, with the image's type added when the address gives it elsewhere (X's ?format=jpg). Empty when there's
+// nothing to go by, which leaves the name to Firefox.
 function fileNameFor(url) {
   let parsed = null;
   try {
@@ -196,7 +198,8 @@ function fileNameFor(url) {
   } catch (err) {
     return '';
   }
-  let name = parsed.pathname.split('/').pop() || '';
+  const named = SITES.map((site) => (site.fileName ? site.fileName(url) : '')).find(Boolean);
+  let name = named || parsed.pathname.split('/').pop() || '';
   try {
     name = decodeURIComponent(name);
   } catch (err) {

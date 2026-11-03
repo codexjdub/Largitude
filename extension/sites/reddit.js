@@ -60,5 +60,13 @@
       const urls = player ? filesOf(player.getAttribute('packaged-media-json')) : [];
       return urls.length ? { urls, poster: player.getAttribute('poster') || '' } : null;
     },
+
+    // A video's files are named after their size (m2-res_720p.mp4 on packaged-media.redd.it, DASH_720.mp4 on
+    // v.redd.it), the same for every video, so a saved one is named after the video's id, which comes first in
+    // the path.
+    fileName(url) {
+      const found = /^https?:\/\/(?:packaged-media|v)\.redd\.it\/([a-z0-9]+)\/[^?#]*\.(mp4|webm)(?:[?#]|$)/i.exec(url);
+      return found ? found[1] + '.' + found[2].toLowerCase() : '';
+    },
   });
 })();
