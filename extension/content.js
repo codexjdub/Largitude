@@ -538,8 +538,8 @@
     el.style.marginTop = shift(box.top, box.bottom, view.height) + 'px';
   }
 
-  // The line of keys under the popup, with the setting on: a few for what it shows, and ? for the rest. Not at
-  // actual size, where the popup fills the window.
+  // The line of keys under the popup, with the setting on: a few for what it shows, the ones used most, and ? for
+  // the rest. Not at actual size, where the popup fills the window.
   function showHint() {
     if (!keysUnder || actualSize || !full) {
       hint.style.display = 'none';
@@ -548,8 +548,8 @@
     const keys = isVideo(full)
       ? [['M', 'sound'], ['Space', 'pause'], ['S', 'save']]
       : gallery
-        ? [['← →', 'next'], ['S', 'save'], ['Z', 'actual size']]
-        : [['S', 'save'], ['Z', 'actual size'], ['R', 'turn']];
+        ? [['← →', 'next'], ['S', 'save'], ['C', 'copy']]
+        : [['S', 'save'], ['C', 'copy'], ['Z', 'actual size']];
     hint.replaceChildren(
       ...keys.concat([['?', 'all keys']]).map(([key, what]) => {
         const item = label(' ' + what);

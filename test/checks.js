@@ -475,7 +475,7 @@
     await until(() => popupIn(document).open, 3000);
     let popup = popupIn(document);
     const under = popup.hintBox.top >= popup.box.bottom && popup.hintBox.bottom <= document.documentElement.clientHeight;
-    report(/save/.test(popup.hint) && /all keys/.test(popup.hint) && under, 'a line under the popup shows a few keys, and ? for all of them', `"${popup.hint}", line ${JSON.stringify(popup.hintBox)}, popup ${JSON.stringify(popup.box)}`);
+    report(/save/.test(popup.hint) && /copy/.test(popup.hint) && /all keys/.test(popup.hint) && under, 'a line under the popup shows a few keys, and ? for all of them', `"${popup.hint}", line ${JSON.stringify(popup.hintBox)}, popup ${JSON.stringify(popup.box)}`);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true, bubbles: true }));
     const reached = pressReaches('?');
     popup = popupIn(document);
