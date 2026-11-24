@@ -5,14 +5,31 @@
 // ---- Sites to leave alone ----
 
 // An entry in the list may be a whole address, such as https://example.com/page pasted from the address bar,
-// or *.example.com: only its host name counts.
+// or *.example.com: only its host name counts. One written with letters beyond a to z, as bücher.de, counts in
+// the form addresses carry it in, xn--bcher-kva.de.
 function hostOf(entry) {
-  return String(entry)
+  const host = String(entry)
     .trim()
     .toLowerCase()
     .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
     .replace(/[/:?#].*$/, '')
     .replace(/^\*\./, '');
+  if (!/[^\x00-\x7f]/.test(host)) return host;
+  try {
+    return new URL('http://' + host).hostname;
+  } catch (err) {
+    return host;
+  }
+}
+
+// The list as edited, from `base`, with the changes made to it meanwhile elsewhere, which left it `current`: the
+// entries the edit has, but for those taken off elsewhere, then those added elsewhere, one per line.
+function rebasedList(base, edited, current) {
+  const was = new Set(entriesOf(base));
+  const now = new Set(entriesOf(current));
+  const kept = entriesOf(edited).filter((entry) => now.has(entry) || !was.has(entry));
+  const added = [...now].filter((entry) => !was.has(entry));
+  return [...new Set(kept.concat(added))].join('\n');
 }
 
 // The entries of a list of sites, as typed: one per line, or separated by spaces or commas.
@@ -190,7 +207,9 @@ function isLeftAlone(url, pageUrl) {
 
 // A file name to save the image or video at `url` under: the name a site rule gives it, or the last part of its
 // path, with the image's type added when the address gives it elsewhere (X's ?format=jpg). Empty when there's
-// nothing to go by, which leaves the name to Firefox.
+// nothing to go by, which leaves the name to Firefox, and for addresses other than http(s), such as data:, whose
+// path is no name at all. A name that still has no type, as Google's photo=s0, gets it from the file once
+// background.js asks the server (withExtension).
 function fileNameFor(url) {
   let parsed = null;
   try {
@@ -198,6 +217,7 @@ function fileNameFor(url) {
   } catch (err) {
     return '';
   }
+  if (!/^https?:$/.test(parsed.protocol)) return '';
   const named = SITES.map((site) => (site.fileName ? site.fileName(url) : '')).find(Boolean);
   let name = named || parsed.pathname.split('/').pop() || '';
   try {
@@ -207,16 +227,54 @@ function fileNameFor(url) {
   }
   // X's older addresses add the size after a colon: photo.jpg:large.
   name = name.replace(/:\w+$/, '');
-  if (name && !/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|jxl)$/i.test(name)) {
+  if (name && !IMAGE_EXTENSION.test(name)) {
     const format = /^(jpe?g|png|gif|webp|avif)/i.exec(parsed.searchParams.get('format') || '');
     if (format) name += '.' + format[1].toLowerCase();
   }
-  // Characters no file system takes, and dots or spaces at either end, which some hide or drop. Long names keep
-  // their end, where the type is.
+  // Characters no file system takes, and dots or spaces at either end, which some hide or drop. Firefox refuses a
+  // name it would have to change, so spaces of other kinds become plain ones, and invisible characters, such as
+  // those that turn the text's direction around, go. Long names keep their end, where the type is.
   return name
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')
+    .replace(/\p{Zs}/gu, ' ')
+    .replace(/[\p{Cf}\p{Zl}\p{Zp}]/gu, '')
+    .replace(/[\\/:*?"<>|\p{Cc}]+/gu, '_')
     .replace(/^[.\s]+|[.\s]+$/g, '')
     .slice(-120);
+}
+
+const IMAGE_EXTENSION = /\.(?:jpe?g|png|gif|webp|avif|bmp|svg|jxl)$/i;
+const MEDIA_EXTENSION = /\.(?:jpe?g|png|gif|webp|avif|bmp|svg|jxl|mp4|m4v|webm|ogv)$/i;
+
+// The extension for a file of `type`, a Content-Type, among the images and videos Largitude shows; '' for others.
+function extensionForType(type) {
+  const extensions = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/avif': 'avif',
+    'image/bmp': 'bmp',
+    'image/svg+xml': 'svg',
+    'image/jxl': 'jxl',
+    'video/mp4': 'mp4',
+    'video/x-m4v': 'm4v',
+    'video/webm': 'webm',
+    'video/ogg': 'ogv',
+  };
+  const essence = String(type || '').split(';')[0].trim().toLowerCase();
+  return Object.hasOwn(extensions, essence) ? extensions[essence] : '';
+}
+
+// Whether a file name ends in an image's or video's extension.
+function hasMediaExtension(name) {
+  return MEDIA_EXTENSION.test(String(name || ''));
+}
+
+// `name` with the extension for a file of `type` added, unless it ends in an image's or video's already, or the
+// type isn't one of theirs.
+function withExtension(name, type) {
+  const extension = extensionForType(type);
+  return !name || hasMediaExtension(name) || !extension ? name : name + '.' + extension;
 }
 
 // ---- The page ----

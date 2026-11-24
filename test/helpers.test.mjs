@@ -30,6 +30,10 @@ const {
   turnsOnceFlipped,
   isPngData,
   hoverDelayOf,
+  rebasedList,
+  extensionForType,
+  hasMediaExtension,
+  withExtension,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -187,6 +191,51 @@ test('fileNameFor leaves the name to Firefox when the address has none, and clea
   const long = fileNameFor('https://example.com/' + 'x'.repeat(300) + '.png');
   assert.equal(long.length, 120);
   assert.ok(long.endsWith('.png'));
+});
+
+test("fileNameFor gives no name for data: and blob: addresses, and keeps names Firefox would refuse out", () => {
+  assert.equal(fileNameFor('data:image/png;base64,iVBORw0KGgo='), '');
+  assert.equal(fileNameFor('blob:https://example.com/8f1c2d3e-0000-4000-8000-000000000000'), '');
+  // A no-break space and other kinds become plain spaces; direction marks and other invisible characters go.
+  assert.equal(fileNameFor('https://example.com/a%C2%A0b%E2%80%83c.jpg'), 'a b c.jpg');
+  assert.equal(fileNameFor('https://example.com/photo%E2%80%AEgpj.exe.png'), 'photogpj.exe.png');
+  assert.equal(fileNameFor('https://example.com/zero%E2%80%8Bwidth%C2%85.png'), 'zerowidth_.png');
+});
+
+test('withExtension adds the type the server gives to a name without one', () => {
+  assert.equal(extensionForType('image/jpeg'), 'jpg');
+  assert.equal(extensionForType('Image/PNG; charset=binary'), 'png');
+  assert.equal(extensionForType('image/svg+xml'), 'svg');
+  assert.equal(extensionForType('video/mp4'), 'mp4');
+  assert.equal(extensionForType('text/html'), '');
+  assert.equal(extensionForType(''), '');
+  assert.equal(withExtension('AbCdEf123=s0', 'image/webp'), 'AbCdEf123=s0.webp');
+  assert.equal(withExtension('image', 'image/png'), 'image.png');
+  // A name with its type already, a type that isn't an image's or video's, or no name: as they are.
+  assert.equal(withExtension('photo.JPG', 'image/png'), 'photo.JPG');
+  assert.equal(withExtension('clip.webm', 'video/webm'), 'clip.webm');
+  assert.equal(withExtension('page', 'text/html'), 'page');
+  assert.equal(withExtension('', 'image/png'), '');
+  assert.ok(hasMediaExtension('a.avif') && hasMediaExtension('b.m4v') && !hasMediaExtension('c.pdf') && !hasMediaExtension(''));
+});
+
+test('a site to leave alone written with letters beyond a to z matches its pages', () => {
+  assert.equal(hostOf('Bücher.de'), 'xn--bcher-kva.de');
+  assert.equal(hostOf('https://www.bücher.de/page'), 'www.xn--bcher-kva.de');
+  assert.ok(isExcluded('bücher.de', 'https://bücher.de/'));
+  assert.ok(isExcluded('bücher.de', 'https://shop.xn--bcher-kva.de/'));
+  assert.ok(isExcluded('xn--bcher-kva.de', 'https://bücher.de/'));
+  assert.ok(!isExcluded('bücher.de', 'https://bucher.de/'));
+});
+
+test('rebasedList saves an edit on top of the changes made meanwhile elsewhere', () => {
+  // Nothing changed elsewhere: the edit as it is, one per line, without repeats.
+  assert.equal(rebasedList('a.example\nb.example', 'a.example, c.example c.example', 'a.example\nb.example'), 'a.example\nc.example');
+  // Elsewhere, d.example went on and b.example came off, while the edit took a.example off and added e.example.
+  assert.equal(rebasedList('a.example\nb.example\nc.example', 'b.example\nc.example\ne.example', 'a.example\nc.example\nd.example'), 'c.example\ne.example\nd.example');
+  // An edit made before anything was shown keeps what's stored too.
+  assert.equal(rebasedList('', 'x.example', 'a.example'), 'x.example\na.example');
+  assert.equal(rebasedList('a.example', '', 'a.example\nb.example'), 'b.example');
 });
 
 test('colorAlpha reads the opacity of the colors getComputedStyle gives', () => {

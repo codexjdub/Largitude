@@ -3,7 +3,7 @@
 // videos are left to it there.
 (() => {
   // A still: i.ytimg.com/vi/<id>/hqdefault.jpg, or vi_webp/<id>/….webp, on any of YouTube's image hosts.
-  const STILL = /^https?:\/\/(?:i\d?\.ytimg\.com|img\.youtube\.com)\/vi(?:_webp)?\/([\w-]{11})\/[\w-]+\.(?:jpg|webp)(?:[?#].*)?$/;
+  const STILL = /^https?:\/\/(?:i\d?\.ytimg\.com|img\.youtube\.com)\/vi(?:_webp)?\/([\w-]{11})\/[\w-]+\.(jpg|webp)(?:[?#].*)?$/;
   // A link to a video: youtube.com/watch?v=<id>, youtu.be/<id>, youtube.com/shorts/<id> and the like.
   const VIDEO =
     /^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})(?:[?&#/].*)?$/;
@@ -18,5 +18,11 @@
     standIn: (url, size) => STILL.test(url) && size.width === 120 && size.height === 90,
     leaveAlone: (url, pageUrl) =>
       /^https?:\/\/(?:[\w-]+\.)?youtube(?:-nocookie)?\.com\//.test(pageUrl) && (STILL.test(url) || VIDEO.test(url)),
+    // Every video's stills have the same names, maxresdefault.jpg and the like, so a saved one is named after the
+    // video: <id>.jpg.
+    fileName(url) {
+      const found = STILL.exec(url);
+      return found ? found[1] + '.' + found[2] : '';
+    },
   });
 })();

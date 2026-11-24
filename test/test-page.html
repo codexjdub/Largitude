@@ -115,6 +115,15 @@
     </section>
 
     <section class="case" data-expect="full-1600x1200.svg">
+      <h2>Image that ignores the mouse, in a web component</h2>
+      <p>The image has pointer-events: none, inside a web component's shadow root, in a card with a background.</p>
+      <div class="card target">
+        <inert-host></inert-host>
+      </div>
+      <p class="expect">Shows FULL 1600×1200</p>
+    </section>
+
+    <section class="case" data-expect="full-1600x1200.svg">
       <h2>Open shadow root</h2>
       <p>The image is inside a web component, as on Reddit.</p>
       <open-host class="target"></open-host>
@@ -322,6 +331,15 @@
       }
     });
   }
+  // An image that ignores the mouse, inside a web component.
+  customElements.define('inert-host', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      this.style.display = 'block';
+      this.style.width = '200px';
+      this.attachShadow({ mode: 'open' }).innerHTML = fixtureImage.replace('<img ', '<img style="pointer-events: none" ');
+    }
+  });
   // A text box inside a web component, whose keys seem to come from the component itself.
   customElements.define('text-host', class extends HTMLElement {
     connectedCallback() {

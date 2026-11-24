@@ -46,12 +46,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
-          # The script and the reviewer notes come from this workflow's own commit, so a retry of a release
-          # made before they existed works too. The description comes from the release's own commit, checked
-          # out above, since it describes that version; a release without one leaves the listing's as it is.
+          # The script comes from this workflow's own commit, so a retry of a release made before it existed
+          # works too. The reviewer notes and the description come from the release's own commit, checked out
+          # above, since they describe that version: notes from a later commit would describe code the reviewers
+          # aren't sent. A release from before the notes existed takes this commit's; one without a description
+          # leaves the listing's as it is.
           git fetch -q --depth=1 origin "$WORKFLOW_SHA"
           git show "FETCH_HEAD:.github/scripts/amo-metadata.mjs" > "$RUNNER_TEMP/amo-metadata.mjs"
-          git show "FETCH_HEAD:amo/reviewer-notes.txt" > "$RUNNER_TEMP/reviewer-notes.txt"
+          if [ -f amo/reviewer-notes.txt ]; then
+            cp amo/reviewer-notes.txt "$RUNNER_TEMP/reviewer-notes.txt"
+          else
+            git show "FETCH_HEAD:amo/reviewer-notes.txt" > "$RUNNER_TEMP/reviewer-notes.txt"
+          fi
           if [ -z "$RELEASE_NOTES" ]; then RELEASE_NOTES="$(gh release view "$TAG" --json body -q .body)"; fi
           RELEASE_NOTES="$RELEASE_NOTES" node "$RUNNER_TEMP/amo-metadata.mjs" "$RUNNER_TEMP/amo-metadata.json" \
             "$RUNNER_TEMP/reviewer-notes.txt" amo/description.txt

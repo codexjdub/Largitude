@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const context = vm.createContext({ URL });
+const context = vm.createContext({ URL, TextEncoder });
 for (const file of ['helpers.js', 'settings.js']) {
   vm.runInContext(readFileSync(new URL('../extension/' + file, import.meta.url), 'utf8'), context, { filename: file });
 }
@@ -88,4 +88,34 @@ test('until they move to the synced storage, the settings are read where they we
   assert.deepEqual(plain(await readOptions()), { excluded: 'example.com', hoverDelay: 'normal', galleryWheelReversed: true, keysUnderPopup: true });
   storage({ options: { hoverDelay: 'long' }, 'site:other.net': 0 }, { options: { excluded: 'example.com' } });
   assert.equal((await readOptions()).excluded, 'other.net');
+});
+
+test("settings Firefox's synced storage can't hold change nothing, and say why", async () => {
+  const { sync } = storage();
+  const sites = Array.from({ length: 511 }, (_, i) => `s${i}.example`);
+  await saveOptions({ excluded: ['a.example', ...sites.slice(1)].join('\n') });
+  sync.writes.length = 0;
+  // a.example swapped for two sites: 512 sites, with the other settings 513 items, one too many.
+  const tooMany = await saveOptions({ excluded: ['b.example', 'c.example', ...sites.slice(1)].join('\n') }).catch((err) => err);
+  assert.equal(tooMany.limit, 'sites');
+  assert.deepEqual(sync.writes, []);
+  assert.ok((await readOptions()).excluded.startsWith('a.example\n'));
+  // Swapped for one, it fits.
+  await saveOptions({ excluded: ['b.example', ...sites.slice(1)].join('\n') });
+  assert.ok((await readOptions()).excluded.startsWith('b.example\n'));
+  // An entry longer than an item may be.
+  const tooLong = await saveOptions({ excluded: 'x'.repeat(8200) + '.example' }).catch((err) => err);
+  assert.equal(tooLong.limit, 'size');
+});
+
+test('a save that fails as it writes puts back the sites it took off', async () => {
+  const { sync } = storage();
+  await saveOptions({ excluded: 'a.example\nb.example' });
+  const set = sync.set;
+  sync.set = async () => {
+    sync.set = set;
+    throw new Error('QuotaExceededError');
+  };
+  await assert.rejects(saveOptions({ excluded: 'a.example\nc.example' }), /QuotaExceededError/);
+  assert.equal((await readOptions()).excluded, 'a.example\nb.example');
 });

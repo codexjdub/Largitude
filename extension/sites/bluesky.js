@@ -27,4 +27,13 @@ addSite({
     if (images.length < 2 || index < 0) return null;
     return { images, index };
   },
+
+  // An image's address ends in its id and its type after an @ (…/bafkrei…@jpeg), which no file name takes as its
+  // type: saved as bafkrei….jpg.
+  fileName(url) {
+    const found = /^https?:\/\/cdn\.bsky\.app\/img\/[\w-]+\/plain\/[^/?#]+\/(\w+)@(jpe?g|png|gif|webp)(?:[?#]|$)/i.exec(url);
+    if (!found) return '';
+    const type = found[2].toLowerCase();
+    return found[1] + '.' + (type === 'jpeg' ? 'jpg' : type);
+  },
 });

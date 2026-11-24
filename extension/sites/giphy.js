@@ -9,4 +9,9 @@ addSite({
       '$1giphy.mp4',
     ],
   ],
+  // Every GIF's files have the same names, giphy.mp4 and the like, so a saved one is named after the GIF's id.
+  fileName(url) {
+    const found = /^https?:\/\/(?:media\d*|i)\.giphy\.com\/media\/(?:v1\.[^/?#]+\/)?(\w+)\/[\w-]+\.(gif|webp|mp4)(?:[?#]|$)/.exec(url);
+    return found ? found[1] + '.' + found[2] : '';
+  },
 });

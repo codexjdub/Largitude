@@ -15,7 +15,7 @@ While it's open:
 | ← → or the mouse wheel | Move through a gallery |
 | S | Save the image or video |
 | O | Open it in a new tab |
-| C | Copy the image |
+| C | Copy the image (on https pages, where Firefox allows it) |
 | Shift+C | Copy the image's or video's address |
 | Z | Show the image at its actual size, filling the window; move the mouse to look around it, and press Z again to go back |
 | R | Turn the image or video a quarter turn clockwise |

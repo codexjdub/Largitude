@@ -10,9 +10,28 @@ const DEFAULT_OPTIONS = { excluded: '', hoverDelay: 'normal', galleryWheelRevers
 // Each site to leave alone is a stored item of its own, named site:<the entry as typed> and holding its place in
 // the list; the other settings are one item, options. Firefox Sync merges the items one by one, the incoming one
 // winning where both computers changed it, so sites added on two computers are both kept, and a site taken off
-// on one is taken off on the other. Firefox syncs at most 512 items, which leaves room for 511 sites.
+// on one is taken off on the other. Firefox syncs at most 512 items, which leaves room for 511 sites, of at most
+// 8,192 bytes each and 102,400 in all, counting each item's name and its value as JSON.
 const SITE = 'site:';
-const MAX_SITES = 511;
+const SYNC_MAX_ITEMS = 512;
+const SYNC_MAX_ITEM_BYTES = 8192;
+const SYNC_MAX_BYTES = 102400;
+const MAX_SITES = SYNC_MAX_ITEMS - 1;
+
+// Why Firefox's synced storage can't hold `items`, all it would hold once saved: 'sites' for too many, 'size' for
+// too long, or '' when they fit.
+function overLimit(items) {
+  const names = Object.keys(items);
+  if (names.length > SYNC_MAX_ITEMS) return 'sites';
+  const encoder = new TextEncoder();
+  let total = 0;
+  for (const name of names) {
+    const bytes = encoder.encode(name + JSON.stringify(items[name])).length;
+    if (bytes > SYNC_MAX_ITEM_BYTES) return 'size';
+    total += bytes;
+  }
+  return total > SYNC_MAX_BYTES ? 'size' : '';
+}
 
 // The items to store for `options`.
 function storedItems(options) {
@@ -46,12 +65,23 @@ async function readOptions() {
 // Saves every setting, writing only the sites that are new or have moved, and taking off only the sites that were
 // stored and aren't in the list now. A site added meanwhile by another save, such as the toolbar button's, stays.
 // The sites taken off go first, and the rest in one write, so a page that hears of that write finds the list whole.
+// Settings that Firefox can't hold change nothing: they're turned down before anything is written, with an error
+// whose `limit` says why (overLimit), and should the write fail anyway, the sites taken off go back.
 async function saveOptions(options) {
   const before = await browser.storage.sync.get(null);
   const items = storedItems(options);
   const gone = Object.keys(before).filter((name) => name.startsWith(SITE) && !Object.hasOwn(items, name));
   const changed = {};
   for (const name of Object.keys(items)) if (name === 'options' || before[name] !== items[name]) changed[name] = items[name];
+  const after = { ...before, ...changed };
+  gone.forEach((name) => delete after[name]);
+  const limit = overLimit(after);
+  if (limit) throw Object.assign(new Error(`Firefox's synced storage can't hold these settings (${limit})`), { limit });
   if (gone.length) await browser.storage.sync.remove(gone);
-  await browser.storage.sync.set(changed);
+  try {
+    await browser.storage.sync.set(changed);
+  } catch (err) {
+    if (gone.length) await browser.storage.sync.set(Object.fromEntries(gone.map((name) => [name, before[name]]))).catch(() => {});
+    throw err;
+  }
 }

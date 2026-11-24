@@ -248,14 +248,34 @@
     const rect = el.getBoundingClientRect();
     const view = viewport();
     if (rect.width > view.width / 2 || rect.height > view.height / 2) return null;
-    const images = el.querySelectorAll('img, video');
-    for (let i = 0; i < images.length && i < 20; i++) {
+    const images = mediaInside(el, 20);
+    for (let i = 0; i < images.length; i++) {
       const box = images[i].getBoundingClientRect();
       if (x < box.left || x >= box.right || y < box.top || y >= box.bottom) continue;
       const found = imageOf(images[i]);
       if (found) return found;
     }
     return null;
+  }
+
+  // The first `max` images and videos inside `el`, in its shadow roots and theirs too, as layersAt looks: closed
+  // ones included. A few hundred elements are looked through at most, `el` being a small one.
+  function mediaInside(el, max) {
+    const found = [];
+    let looked = 0;
+    const visit = (scope, depth) => {
+      const shadow = depth < 4 && scope.nodeType === Node.ELEMENT_NODE && (scope.openOrClosedShadowRoot || scope.shadowRoot);
+      if (shadow) visit(shadow, depth + 1);
+      const all = scope.querySelectorAll('*');
+      for (let i = 0; i < all.length && found.length < max && looked < 500; i++, looked++) {
+        const node = all[i];
+        if (node.localName === 'img' || node.localName === 'video') found.push(node);
+        const inner = depth < 4 && (node.openOrClosedShadowRoot || node.shadowRoot);
+        if (inner) visit(inner, depth + 1);
+      }
+    };
+    visit(el, 0);
+    return found;
   }
 
   // Whether `el` is inside `container`, looking out through any shadow roots it's in.
@@ -555,11 +575,13 @@
       hint.style.display = 'none';
       return;
     }
+    // C only where it can copy the image, on https pages.
+    const copy = canCopyImages() ? [['C', 'copy']] : [];
     const keys = isVideo(full)
       ? [['M', 'sound'], ['Space', 'pause'], ['S', 'save']]
       : gallery
-        ? [['← →', 'next'], ['S', 'save'], ['C', 'copy']]
-        : [['S', 'save'], ['C', 'copy'], ['Z', 'actual size']];
+        ? [['← →', 'next'], ['S', 'save'], ...copy]
+        : [['S', 'save'], ...copy, ['Z', 'actual size']];
     hint.replaceChildren(
       ...keys.concat([['?', 'all keys']]).map(([key, what]) => {
         const item = label(' ' + what);
@@ -767,9 +789,11 @@
       sized = true;
       done(media);
     };
+    // On to the next address. Once shown, the image or video stays if the rest of it doesn't come (a video's
+    // connection lost partway, say), with a note.
     const next = () => {
       if (loading !== media) return;
-      if (sized) dismiss();
+      if (sized) note("Couldn't load the rest of it");
       else fetchMedia(item, done, index + 1);
     };
     // Loaded without a size, it can't be shown: a sound-only video, or an SVG with no width and height of its own
@@ -1025,9 +1049,10 @@
     const url = full.currentSrc || full.src;
     let result = 'failed';
     try {
-      result = await browser.runtime.sendMessage({ type: 'save', url, filename: fileNameFor(url) });
+      const file = await pageFile(url);
+      result = await browser.runtime.sendMessage({ type: 'save', url, filename: fileNameFor(url), file });
     } catch (err) {
-      // No background script to answer.
+      // No background script to answer, or no file to send.
     }
     note({ saved: 'Saved', canceled: 'Not saved' }[result] || "Couldn't save");
   }
@@ -1035,19 +1060,44 @@
   // O: the full-size image or video in a new tab, next to this one, which the background script opens.
   async function openInTab() {
     if (!shown || !full) return;
+    const url = full.currentSrc || full.src;
     let opened = false;
     try {
-      opened = await browser.runtime.sendMessage({ type: 'open', url: full.currentSrc || full.src });
+      opened = await browser.runtime.sendMessage({ type: 'open', url, file: await pageFile(url) });
     } catch (err) {
-      // No background script to answer.
+      // No background script to answer, or no file to send.
     }
     if (!opened) note("Couldn't open it");
   }
 
+  // For S and O, the file at a data: or blob: address, which only the page can read, as { type, bytes } for the
+  // background script; null for other addresses, which it loads itself. Where it can't be read again, the popup's
+  // image is drawn into a PNG, as for C.
+  async function pageFile(url) {
+    if (/^https?:/i.test(url)) return null;
+    try {
+      const response = await fetch(url);
+      if (response.ok) return { type: response.headers.get('content-type') || '', bytes: await response.arrayBuffer() };
+    } catch (err) {
+      // Drawn instead.
+    }
+    if (isVideo(full)) throw new Error('No file');
+    const png = await canvasPng(full, full.naturalWidth, full.naturalHeight);
+    return { type: 'image/png', bytes: await png.arrayBuffer() };
+  }
+
+  // Whether the clipboard takes images here: Firefox gives pages and the scripts on them the clipboard on https
+  // pages only.
+  const canCopyImages = () => !!navigator.clipboard && typeof ClipboardItem === 'function';
+
   // C: the image itself, on the clipboard, as a PNG, the one kind of image Firefox puts there. Firefox allows the
-  // clipboard only while a key is being pressed, on https pages, so the clipboard is handed the PNG to come.
+  // clipboard only while a key is being pressed, so the clipboard is handed the PNG to come.
   async function copyImage() {
     if (!shown || !full || isVideo(full)) return;
+    if (!canCopyImages()) {
+      note('Images can be copied on https pages only');
+      return;
+    }
     const png = pngOf(full);
     png.catch(() => {}); // the clipboard says it failed
     note('Copying…');
@@ -1093,14 +1143,38 @@
     });
   }
 
-  // Shift+C: the full-size image or video's address, on the clipboard.
+  // Shift+C: the full-size image or video's address, on the clipboard. On http pages, which have no clipboard to
+  // write to, as the Copy command copies text, while the key is being pressed.
   async function copyAddress() {
     if (!shown || !full) return;
+    const address = full.currentSrc || full.src;
+    let copied = false;
     try {
-      await navigator.clipboard.writeText(full.currentSrc || full.src);
-      note('Address copied');
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(address);
+        copied = true;
+      } else {
+        copied = copyAsCommand(address);
+      }
     } catch (err) {
-      note("Couldn't copy the address");
+      copied = false;
+    }
+    note(copied ? 'Address copied' : "Couldn't copy the address");
+  }
+
+  // `text` on the clipboard through the Copy command, whose copy event is handed the text instead of the page's
+  // selection, and kept from the page's own copy handlers.
+  function copyAsCommand(text) {
+    const onCopy = (event) => {
+      event.clipboardData.setData('text/plain', text);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    window.addEventListener('copy', onCopy, true);
+    try {
+      return document.execCommand('copy');
+    } finally {
+      window.removeEventListener('copy', onCopy, true);
     }
   }
 
@@ -1220,10 +1294,10 @@
   // Whether this site is one to leave alone, how long to wait, which way the wheel goes and whether keys show under
   // the popup, from the background script. With no answer, as when it isn't up yet, Largitude works with the
   // defaults rather than stay off for good.
-  async function loadSettings() {
+  async function loadSettings(changed) {
     let settings = null;
     try {
-      settings = await browser.runtime.sendMessage({ type: 'settings' });
+      settings = await browser.runtime.sendMessage({ type: 'settings', changed });
     } catch (err) {
       settings = null;
     }
@@ -1234,8 +1308,13 @@
     if (!enabled) hide();
   }
 
+  // A save is often two changes in a row (the sites taken off, then the rest), so the settings are asked for once
+  // they've settled.
+  let settingsTimer = 0;
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync') loadSettings();
+    if (area !== 'sync') return;
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(loadSettings, 50, true);
   });
-  loadSettings();
+  loadSettings(false);
 })();

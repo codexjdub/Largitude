@@ -374,3 +374,41 @@ test("Reddit: a saved video is named after the video, not its size", () => {
   assert.equal(fileNameFor('https://i.redd.it/abc123def.png'), 'abc123def.png');
   assert.equal(fileNameFor('https://example.com/videos/clip-640x360.webm'), 'clip-640x360.webm');
 });
+
+test('Bluesky, YouTube and Giphy: a saved file is named after the image, video or GIF', () => {
+  // Bluesky's type comes after an @, which no file name takes as its type.
+  assert.equal(fileNameFor('https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:abc123/bafkreihx3abc@jpeg'), 'bafkreihx3abc.jpg');
+  assert.equal(fileNameFor('https://cdn.bsky.app/img/avatar/plain/did:plc:abc123/bafkreihx3abc@png'), 'bafkreihx3abc.png');
+  // Without the type, the server gives it once Firefox is asked to save (withExtension).
+  assert.equal(fileNameFor('https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:abc123/bafkreihx3abc'), 'bafkreihx3abc');
+  // Every YouTube video's stills, and every GIF's files, have the same names.
+  assert.equal(fileNameFor('https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg'), 'dQw4w9WgXcQ.jpg');
+  assert.equal(fileNameFor('https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/hqdefault.webp'), 'dQw4w9WgXcQ.webp');
+  assert.equal(fileNameFor('https://media.giphy.com/media/MsJO9AUbrLWy4/giphy.mp4'), 'MsJO9AUbrLWy4.mp4');
+  assert.equal(fileNameFor('https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjEx/DCZb48uIFPQEWXVC0w/200w.webp'), 'DCZb48uIFPQEWXVC0w.webp');
+  // The YouTube rules still work with the type captured.
+  assert.deepEqual(plain(fullSizeUrls('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg')).slice(0, 1), ['https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg']);
+});
+
+test("Google Images: the page's scripts are each read once, not again on every move of the mouse", () => {
+  const google = SITES.find((site) => site.name === 'Google Images');
+  let reads = 0;
+  const script = (text) => ({
+    get textContent() {
+      reads++;
+      return text;
+    },
+  });
+  const listing = '"Y9jcXztxNgSz8M",["https://encrypted-tbn0.gstatic.com/images?q\\u003dx",1,1],["https://example.com/lake.jpg",1024,1024]';
+  const doc = { location: { href: 'https://www.google.com/search?q=lake&udm=2' }, scripts: [script('var a=1;'), script(listing)] };
+  const image = (id) => ({ ownerDocument: doc, closest: () => ({ getAttribute: () => id }) });
+  assert.equal(google.original(image('Y9jcXztxNgSz8M')), 'https://example.com/lake.jpg');
+  assert.equal(reads, 2);
+  google.original(image('Y9jcXztxNgSz8M'));
+  assert.equal(reads, 2);
+  // One more script: only it is read, and what the others listed stays.
+  doc.scripts.push(script(listing.replace('Y9jcXztxNgSz8M', 'c_auKTKZbHSCMM').replace('lake', 'pond')));
+  assert.equal(google.original(image('c_auKTKZbHSCMM')), 'https://example.com/pond.jpg');
+  assert.equal(google.original(image('Y9jcXztxNgSz8M')), 'https://example.com/lake.jpg');
+  assert.equal(reads, 3);
+});

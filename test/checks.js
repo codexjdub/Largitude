@@ -492,7 +492,57 @@
   async function settle(settings) {
     window.standaloneSettings = settings;
     browser.storage.onChanged.listeners.forEach((listener) => listener({ options: {} }, 'sync'));
-    await wait(50);
+    // Largitude asks for them once the changes have settled, 50 ms on.
+    await wait(150);
+  }
+
+  // Where the image or video stops loading once shown, the popup stays, and says so.
+  async function checkLateError() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    popupIn(document).full.dispatchEvent(new Event('error'));
+    const noted = await until(() => /rest of it/i.test(popupIn(document).note || ''), 1000);
+    report(popupIn(document).open && noted, "an image that stops loading once shown stays, with a note", `open ${popupIn(document).open}, note "${popupIn(document).note}"`);
+    await away(document);
+  }
+
+  // On http pages, which have no clipboard to write to, the line of keys leaves C out and C says why, and Shift+C
+  // copies the address through the Copy command. Only with ?standalone, where the clipboard can be taken away.
+  async function checkCopyWithoutClipboard() {
+    const el = document.querySelector('.case .target');
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const execCommand = document.execCommand;
+    let copied = '';
+    let pageHeard = false;
+    const pageListener = () => (pageHeard = true);
+    document.addEventListener('copy', pageListener);
+    // The Copy command, as Firefox runs it: a copy event, whose clipboardData goes on the clipboard.
+    document.execCommand = (command) => {
+      const data = new DataTransfer();
+      document.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
+      copied = data.getData('text/plain');
+      return command === 'copy';
+    };
+    try {
+      await away(document);
+      await hover(document, el);
+      await until(() => popupIn(document).open, 3000);
+      const popup = popupIn(document);
+      report(/save/.test(popup.hint) && !/copy/.test(popup.hint), 'on http pages, the line of keys leaves C out', `"${popup.hint}"`);
+      pressReaches('c');
+      const said = await until(() => /https pages only/i.test(popupIn(document).note || ''), 1000);
+      report(said, 'on http pages, C says images can be copied on https pages only', `note "${popupIn(document).note}"`);
+      pressReaches('C', { shiftKey: true });
+      const noted = await until(() => /address copied/i.test(popupIn(document).note || ''), 1000);
+      report(noted && /full-1600x1200\.svg$/.test(copied) && !pageHeard, 'on http pages, Shift+C copies the address through the Copy command, out of the page\'s hearing', `copied "${copied}", the page heard it ${pageHeard}, note "${popupIn(document).note}"`);
+    } finally {
+      delete navigator.clipboard;
+      document.execCommand = execCommand;
+      document.removeEventListener('copy', pageListener);
+      await away(document);
+    }
   }
 
   // With "Show keys under the popup" off, there's no line of keys.
@@ -541,6 +591,8 @@
     if (standalone) await checkDelaySetting();
     if (standalone) await checkSaveKey();
     if (standalone) await checkOpenAndCopy();
+    if (standalone) await checkCopyWithoutClipboard();
+    await checkLateError();
     const failed = lines.filter((line) => !line.ok).length;
     const summary = document.createElement('div');
     summary.className = failed ? 'fail' : 'pass';

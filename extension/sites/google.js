@@ -6,25 +6,30 @@
   const SEARCH = /^https:\/\/www\.google\.[a-z.]+\/search\b/;
   const LISTED = /"([\w-]{8,24})",\["https?:[^"]+",\d+,\d+\],\["(https?:[^"]+)",\d+,\d+\]/g;
 
-  // The originals by result id, from the page's scripts. The same page comes up on every move of the mouse, so
-  // they're read again only when there are more scripts.
-  let read = { doc: null, count: -1, originals: new Map() };
+  // The originals by result id, from the page's scripts. The same page comes up on every move of the mouse, and
+  // its scripts run to megabytes, so they're looked at again only when there are more, and then only those not read
+  // yet. One with no text yet, or a file's, is looked at again next time.
+  let read = { doc: null, count: -1, done: new WeakSet(), originals: new Map() };
   function originalsIn(doc) {
     const scripts = doc.scripts;
-    if (read.doc === doc && read.count === scripts.length) return read.originals;
-    const originals = new Map();
+    if (read.doc !== doc) read = { doc, count: -1, done: new WeakSet(), originals: new Map() };
+    if (read.count === scripts.length) return read.originals;
     for (let i = 0; i < scripts.length; i++) {
-      for (const [, id, address] of scripts[i].textContent.matchAll(LISTED)) {
+      const script = scripts[i];
+      if (read.done.has(script)) continue;
+      const text = script.textContent;
+      if (text) read.done.add(script);
+      for (const [, id, address] of text.matchAll(LISTED)) {
         try {
           // JSON in the script: & and = come as & and =.
-          originals.set(id, JSON.parse('"' + address + '"'));
+          read.originals.set(id, JSON.parse('"' + address + '"'));
         } catch (err) {
           // Not an address after all.
         }
       }
     }
-    read = { doc, count: scripts.length, originals };
-    return originals;
+    read.count = scripts.length;
+    return read.originals;
   }
 
   addSite({
