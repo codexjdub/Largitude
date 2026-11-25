@@ -7,7 +7,10 @@ const status = field('status');
 // The sites to leave alone as last shown, which an edit in progress started from.
 let loaded = '';
 
-function show(text) {
+// `text` beside the setting `changed`, or where it was last.
+function show(text, changed) {
+  const setting = changed && changed.closest ? changed.closest('fieldset') : null;
+  if (setting && status.parentNode !== setting) setting.append(status);
   status.textContent = text;
   setTimeout(() => {
     if (status.textContent === text) status.textContent = '';
@@ -30,7 +33,8 @@ async function load() {
   field('keysUnderPopup').checked = values.keysUnderPopup;
 }
 
-async function save() {
+async function save(event) {
+  const changed = event && event.target;
   try {
     // The list as edited, with what Firefox Sync or the toolbar button changed since it was shown.
     const excluded = rebasedList(loaded, field('excluded').value, (await readOptions()).excluded);
@@ -41,13 +45,14 @@ async function save() {
       keysUnderPopup: field('keysUnderPopup').checked,
     });
     loaded = excluded;
-    show('Saved.');
+    show('Saved.', changed);
   } catch (err) {
+    // Short, to fit beside the setting's name.
     const why = {
-      sites: `Couldn't save: Firefox keeps ${MAX_SITES} sites to leave alone at most.`,
-      size: "Couldn't save: the list is longer than Firefox's synced storage holds.",
+      sites: `Not saved: Firefox keeps ${MAX_SITES} sites at most.`,
+      size: 'Not saved: too long for Firefox to keep.',
     };
-    show(why[err && err.limit] || "Couldn't save.");
+    show(why[err && err.limit] || "Couldn't save.", changed);
   }
 }
 

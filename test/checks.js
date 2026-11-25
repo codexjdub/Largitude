@@ -34,7 +34,8 @@
   // box, the thumbnail standing in for the full image comes first, the full image or video last.
   function popupIn(doc) {
     const host = doc.querySelector('largitude-popup');
-    if (!host || host.style.display === 'none' || !host.matches(':popover-open')) return { open: false };
+    // Fading out (opacity 0), it counts as closed.
+    if (!host || host.style.display === 'none' || host.style.opacity === '0' || !host.matches(':popover-open')) return { open: false };
     const [stage, hint, keys] = host.shadowRoot.children;
     const children = [...stage.children];
     const media = children.filter((el) => el.localName === 'img' || el.localName === 'video');
@@ -54,6 +55,10 @@
       hint: hint.style.display !== 'none' ? hint.textContent : '',
       hintBox: hint.getBoundingClientRect(),
       keys: keys.style.display !== 'none' ? keys : null,
+      stage,
+      // A video's corner, with its icons, and a gallery's dots.
+      videoState: children.find((el) => el.querySelector('svg')),
+      dots: children.find((el) => el.firstElementChild && el.firstElementChild.localName === 'span' && !el.textContent),
     };
   }
 
@@ -161,8 +166,8 @@
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
     const reached = pressReaches('s');
-    const noted = await until(() => /save/i.test(popupIn(document).note || ''), 1000);
-    report(!reached && noted, 'S saves, without reaching the page, and the popup says how it went', reached ? 'the page got the key' : 'no note showed');
+    const noted = await until(() => /^Saved full-1600x1200\.svg$/.test(popupIn(document).note || ''), 1000);
+    report(!reached && noted, 'S saves, without reaching the page, and the popup says so with the name it was saved under', reached ? 'the page got the key' : `note "${popupIn(document).note}"`);
     await away(document);
   }
 
@@ -496,6 +501,54 @@
     await wait(150);
   }
 
+  // The popup fades in and out, shows a checkerboard behind an image, and none behind a video.
+  async function checkLook() {
+    const el = document.querySelector('.case .target');
+    await away(document);
+    await hover(document, el);
+    await until(() => popupIn(document).open, 3000);
+    const host = document.querySelector('largitude-popup');
+    const fades = /opacity/.test(host.style.transition);
+    const checkered = /conic-gradient/.test(popupIn(document).stage.style.backgroundImage);
+    report(fades && checkered, 'the popup fades in, with a checkerboard behind the image', `transition "${host.style.transition}", background "${popupIn(document).stage.style.backgroundImage.slice(0, 40)}"`);
+    moveTo(document, 2, 2);
+    const gone = await until(() => host.style.display === 'none', 1000);
+    report(!popupIn(document).open && gone, 'moving off, it fades out and goes', `display ${host.style.display}, opacity ${host.style.opacity}`);
+  }
+
+  // A video's corner shows while its sound is off and while it's paused; M and Space change it.
+  async function checkVideoState() {
+    const card = [...document.querySelectorAll('.case')].find((c) => /^Link to a video file$/.test(c.querySelector('h2').textContent));
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    await until(() => popupIn(document).video, 3000);
+    const icons = () => {
+      const corner = popupIn(document).videoState;
+      if (!corner || corner.style.display === 'none') return 'none';
+      const [muted, paused] = corner.children;
+      return [muted.style.display !== 'none' && 'muted', paused.style.display !== 'none' && 'paused'].filter(Boolean).join(' ') || 'none';
+    };
+    const start = icons();
+    pressReaches('m');
+    const sound = await until(() => icons() === 'none', 1000);
+    pressReaches(' ');
+    const paused = await until(() => icons() === 'paused', 1000);
+    report(start === 'muted' && sound && paused, "a video's corner shows its sound off, then nothing once M turns it on, then paused after Space", `at first ${start}, then ${icons()}`);
+    await away(document);
+  }
+
+  // A gallery shows a dot for each image, the one shown brighter.
+  async function checkDots() {
+    const card = [...document.querySelectorAll('.case')].find((c) => /^X post with photos$/.test(c.querySelector('h2').textContent));
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    await until(() => popupIn(document).counter, 3000);
+    const dots = popupIn(document).dots;
+    const lit = dots ? [...dots.children].map((dot) => (dot.style.background === 'rgb(255, 255, 255)' || dot.style.background === '#fff' ? 'on' : 'off')).join(' ') : '';
+    report(!!dots && dots.style.display !== 'none' && lit === 'off on off', 'a gallery shows a dot for each image, the one shown brighter', `"${popupIn(document).counter}", dots ${lit || 'none'}`);
+    await away(document);
+  }
+
   // Where the image or video stops loading once shown, the popup stays, and says so.
   async function checkLateError() {
     const el = document.querySelector('.case .target');
@@ -593,6 +646,9 @@
     if (standalone) await checkOpenAndCopy();
     if (standalone) await checkCopyWithoutClipboard();
     await checkLateError();
+    await checkLook();
+    await checkVideoState();
+    await checkDots();
     const failed = lines.filter((line) => !line.ok).length;
     const summary = document.createElement('div');
     summary.className = failed ? 'fail' : 'pass';

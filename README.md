@@ -6,7 +6,7 @@ A Firefox extension that shows images and videos full size when you rest the mou
 
 ## How to use it
 
-Rest the mouse on a thumbnail, a picture in a post, or a link to an image or video file. After a moment, the full-size version opens beside the pointer, fitted to the window. Move away and it closes.
+Rest the mouse on a thumbnail, a picture in a post, or a link to an image or video file. After a moment, the full-size version opens beside the pointer, fitted to the window, with a checkerboard showing through any transparent parts. Move away and it closes.
 
 While it's open:
 
@@ -36,8 +36,8 @@ The mouse wheel moves through a gallery the way it scrolls the page: scrolling d
 - **Google Images**: the original image of each of the first 100 or so results, which Google's page lists; for results that load as you scroll, Google's larger thumbnail.
 - **YouTube videos**: the video's largest still, for its thumbnails and for links to it, on other sites. On YouTube itself, thumbnails are left to YouTube's own preview.
 - **Links to an Imgur image** (`imgur.com/…`): the image itself.
-- **Galleries**: a Reddit gallery, an X post with several photos or a Bluesky post with several images opens as a gallery, with a counter showing where you are.
-- **Videos**: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs, small videos playing on a page, and Reddit's videos, with their sound. They play muted and looping, with a bar showing how far they've played; one playing on the page goes on from where it is.
+- **Galleries**: a Reddit gallery, an X post with several photos or a Bluesky post with several images opens as a gallery, with a counter and a dot for each image showing where you are.
+- **Videos**: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs, small videos playing on a page, and Reddit's videos, with their sound. They play muted and looping, with a bar showing how far they've played and an icon in the corner while the sound is off or the video is paused; one playing on the page goes on from where it is.
 
 It stays out of the way: the mouse goes right through the popup, it leaves alone images already shown at full size and small icons, and scrolling closes it. Keys you type into a text box go to the text box.
 

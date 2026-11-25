@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "lint": "npx --yes web-ext@10 lint --source-dir extension",
+    "screenshots": "node amo/screenshots/make.mjs",
     "serve": "node test/serve.mjs",
     "test": "node --test \"test/*.test.mjs\""
   }

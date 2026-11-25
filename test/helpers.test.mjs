@@ -34,6 +34,7 @@ const {
   extensionForType,
   hasMediaExtension,
   withExtension,
+  shortened,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -442,4 +443,12 @@ test("isPngData knows a PNG by its first bytes, whatever it's called", () => {
   // A JPEG, and a file too short to tell.
   assert.equal(isPngData(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])), false);
   assert.equal(isPngData(Uint8Array.from([0x89, 0x50])), false);
+});
+
+test('shortened cuts a long name from the middle, keeping its end and type', () => {
+  assert.equal(shortened('photo.jpg', 40), 'photo.jpg');
+  assert.equal(shortened('a-very-long-file-name-from-somewhere-on-the-web.jpeg', 21), 'a-very-lon…e-web.jpeg');
+  assert.equal(shortened('a-very-long-file-name-from-somewhere-on-the-web.jpeg', 21).length, 21);
+  // Letters beyond one UTF-16 unit aren't split.
+  assert.equal(shortened('😀😀😀😀😀😀😀😀😀😀', 5), '😀😀…😀😀');
 });

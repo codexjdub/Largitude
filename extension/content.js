@@ -349,6 +349,10 @@
   let progressDone = 0; // the share of the video the bar last showed as played
   let toast = null;
   let toastTimer = 0;
+  let videoState = null; // a video's corner: whether its sound is off, and whether it's paused
+  let dots = null; // a gallery's dots, one for each image, under the image
+  let fadeTimer = 0; // while the popup fades out, what's left to do once it has
+  let fading = null; // the image or video the popup fades out with
   let actualSize = null; // with Z, the popup's box from before it showed the image at its actual size
   let turns = 0; // the quarter turns clockwise the image or video shown is turned (R), once mirrored (F)
   let flipped = false; // whether F has mirrored the image or video shown left to right
@@ -360,21 +364,23 @@
     Object.keys(styles).forEach((name) => el.style.setProperty(name, styles[name], important ? 'important' : ''));
   const FILL = { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', display: 'block', margin: '0', transform: 'none' };
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  // What each key does, for the panel ? opens.
+  // What each key does, for the panel ? opens, in groups.
   const KEYS = [
-    ['← →', 'Move through a gallery'],
-    ['S', 'Save'],
-    ['O', 'Open in a new tab'],
-    ['C', 'Copy the image'],
-    ['Shift C', 'Copy the address'],
-    ['Z', 'Actual size'],
-    ['R', 'Turn a quarter turn'],
-    ['F', 'Flip left to right'],
-    ['M', 'Sound on or off (video)'],
-    ['Space', 'Pause (video)'],
-    ['?', 'Show or hide these keys'],
-    ['Esc', 'Close'],
+    ['Viewing', [['← →', 'Move through a gallery'], ['Z', 'Actual size'], ['R', 'Turn a quarter turn'], ['F', 'Flip left to right']]],
+    ['Saving', [['S', 'Save'], ['O', 'Open in a new tab'], ['C', 'Copy the image'], ['Shift C', 'Copy the address']]],
+    ['Video', [['M', 'Sound on or off'], ['Space', 'Pause or play']]],
+    ['The popup', [['?', 'Show or hide these keys'], ['Esc', 'Close']]],
   ];
+  // How long the popup takes to fade in or out; not at all for those who'd rather see less motion.
+  const FADE = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 120;
+  // Behind an image, a checkerboard of two middle grays, so a transparent image shows, its dark parts and its
+  // light ones.
+  const CHECKERBOARD = {
+    'background-color': '#38383b',
+    'background-image': 'conic-gradient(#545458 25%, transparent 0 50%, #545458 0 75%, transparent 0)',
+    'background-size': '16px 16px',
+  };
+  const MAX_DOTS = 12; // a gallery with more images shows only its counter
 
   // Styles are set on the elements themselves rather than in a stylesheet: a page's content security policy
   // can't block them, and !important on the host beats the page's stylesheets and the browser's popover styles.
@@ -397,12 +403,14 @@
         'border-radius': '4px',
         background: '#1c1c1e',
         'box-shadow': '0 0 0 1px rgba(0, 0, 0, 0.25), 0 12px 40px rgba(0, 0, 0, 0.45)',
+        opacity: '0',
+        transition: `opacity ${FADE}ms ease-out`,
       },
       true
     );
     const shadow = host.attachShadow({ mode: 'open' });
     stage = make('div');
-    setStyles(stage, { ...FILL, overflow: 'hidden', 'border-radius': '4px' });
+    setStyles(stage, { ...FILL, overflow: 'hidden', 'border-radius': '4px', ...CHECKERBOARD });
     thumbImg = make('img');
     thumbImg.alt = '';
     setStyles(thumbImg, FILL);
@@ -465,9 +473,42 @@
       color: '#fff',
       font: '600 13px/18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
       'white-space': 'nowrap',
+      'max-width': 'calc(100% - 44px)',
+      overflow: 'hidden',
+      'text-overflow': 'ellipsis',
       display: 'none',
     });
-    stage.append(thumbImg, spinner, counter, progress, toast);
+    // In a video's top left corner, whether its sound is off and whether it's paused, as icons.
+    videoState = make('div');
+    setStyles(videoState, {
+      position: 'absolute',
+      'z-index': '1',
+      top: '8px',
+      left: '8px',
+      gap: '6px',
+      padding: '4px 7px',
+      'border-radius': '10px',
+      background: 'rgba(0, 0, 0, 0.6)',
+      display: 'none',
+    });
+    const muted = icon([{ d: 'M2 5.5h3L9 2.5v11l-4-3H2z' }, { d: 'M11 5.5l4 5M15 5.5l-4 5', stroke: true }]);
+    const paused = icon([{ d: 'M3.5 3h3v10h-3zM9.5 3h3v10h-3z' }]);
+    videoState.append(muted, paused);
+    // Under a gallery's image, a dot for each image, the one shown brighter.
+    dots = make('div');
+    setStyles(dots, {
+      position: 'absolute',
+      'z-index': '1',
+      left: '50%',
+      bottom: '10px',
+      transform: 'translateX(-50%)',
+      gap: '6px',
+      padding: '4px 7px',
+      'border-radius': '8px',
+      background: 'rgba(0, 0, 0, 0.35)',
+      display: 'none',
+    });
+    stage.append(thumbImg, spinner, counter, progress, videoState, dots, toast);
     // Centered under the popup.
     hint = make('div');
     setStyles(hint, {
@@ -492,28 +533,76 @@
       left: '50%',
       top: '50%',
       transform: 'translate(-50%, -50%)',
-      'grid-template-columns': 'auto auto auto auto',
-      gap: '6px 10px',
-      'align-items': 'baseline',
-      padding: '12px 14px',
+      'grid-template-columns': 'auto auto',
+      gap: '12px 24px',
+      padding: '14px 16px 12px',
       'border-radius': '8px',
-      background: 'rgba(0, 0, 0, 0.8)',
+      background: 'rgba(20, 20, 22, 0.92)',
+      'backdrop-filter': 'blur(8px)',
+      'box-shadow': '0 0 0 1px rgba(255, 255, 255, 0.08)',
       color: 'rgba(255, 255, 255, 0.9)',
       font: `13px/20px ${FONT}`,
       'white-space': 'nowrap',
       display: 'none',
     });
-    KEYS.forEach(([key, what]) => keysPanel.append(keycap(key), label(what)));
+    // The keys in groups, two groups across: a heading, then each key beside what it does.
+    KEYS.forEach(([title, keys]) => {
+      const group = make('div');
+      // The keys' column as wide in every group, so what they do lines up across groups.
+      setStyles(group, {
+        display: 'grid',
+        'grid-template-columns': 'minmax(56px, max-content) auto',
+        gap: '4px 10px',
+        'align-content': 'start',
+        'align-items': 'baseline',
+      });
+      const heading = label(title);
+      setStyles(heading, {
+        'grid-column': '1 / -1',
+        color: 'rgba(255, 255, 255, 0.55)',
+        font: `600 11px/16px ${FONT}`,
+        'letter-spacing': '0.04em',
+        'text-transform': 'uppercase',
+      });
+      group.append(heading);
+      keys.forEach(([key, what]) => group.append(keycap(key), label(what)));
+      keysPanel.append(group);
+    });
     const footnote = label("Largitude's settings turn the keys under the popup on or off.");
-    setStyles(footnote, { 'grid-column': '1 / -1', 'margin-top': '4px', color: 'rgba(255, 255, 255, 0.6)', font: `12px/18px ${FONT}` });
+    setStyles(footnote, { 'grid-column': '1 / -1', color: 'rgba(255, 255, 255, 0.55)', font: `12px/18px ${FONT}` });
     keysPanel.append(footnote);
     shadow.append(stage, hint, keysPanel);
+  }
+
+  // A 16 × 16 icon, drawn in white: each of `shapes` is a path filled, or with `stroke`, drawn as a line.
+  function icon(shapes) {
+    const SVG = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    setStyles(svg, { display: 'block' });
+    shapes.forEach((shape) => {
+      const path = document.createElementNS(SVG, 'path');
+      path.setAttribute('d', shape.d);
+      if (shape.stroke) {
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#fff');
+        path.setAttribute('stroke-width', '1.6');
+        path.setAttribute('stroke-linecap', 'round');
+      } else {
+        path.setAttribute('fill', '#fff');
+      }
+      svg.append(path);
+    });
+    return svg;
   }
 
   function keycap(key) {
     const cap = make('b');
     setStyles(cap, {
-      'justify-self': 'center',
+      'justify-self': 'start',
       padding: '0 5px',
       'border-radius': '4px',
       background: 'rgba(255, 255, 255, 0.18)',
@@ -534,6 +623,8 @@
     if (!shown) return;
     toast.textContent = text;
     toast.style.display = 'block';
+    // Above a gallery's dots.
+    toast.style.bottom = dots.style.display === 'none' ? '10px' : '30px';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       toast.style.display = 'none';
@@ -543,6 +634,9 @@
   function placeHost(box) {
     if (!host) createHost();
     if (!host.isConnected) root.append(host);
+    // One fading out is done with at once.
+    if (fadeTimer) finishHiding();
+    const appearing = host.style.display === 'none';
     setStyles(
       host,
       { display: 'block', left: box.left + 'px', top: box.top + 'px', width: box.width + 'px', height: box.height + 'px' },
@@ -554,6 +648,9 @@
     } catch (err) {
       // Removed by the page in the meantime: it goes back in next time.
     }
+    // Fading in from nothing, once laid out as it's seen.
+    if (appearing) host.getBoundingClientRect();
+    host.style.setProperty('opacity', '1', 'important');
     if (hint.style.display !== 'none') keepInWindow(hint);
     if (keysOpen) keepInWindow(keysPanel);
   }
@@ -608,6 +705,7 @@
     const size = 30;
     thumbImg.style.display = 'none';
     if (full) full.style.display = 'none';
+    checkered(false);
     placeHost({
       left: Math.max(0, Math.min(pointer.x + 16, view.width - size - 8)),
       top: Math.max(0, Math.min(pointer.y + 16, view.height - size - 8)),
@@ -648,16 +746,58 @@
     }
     setStyles(media, FILL);
     media.style.display = 'block';
+    // The checkerboard shows through an image's transparent parts; a video has none.
+    checkered(!video);
     if (gallery) counter.textContent = gallery.index + 1 + ' / ' + gallery.items.length;
     counter.style.display = gallery ? 'block' : 'none';
     placeHost(box);
     shown = true;
     showHint();
+    showDots();
     listenToWheel(!!gallery);
     // The progress bar starts afresh for a video, and goes for an image.
     progressDone = 0;
     showProgress();
     if (video) play(media, item);
+    showVideoState();
+  }
+
+  // The popup's box with the checkerboard behind an image, or plain and dark.
+  function checkered(on) {
+    setStyles(stage, on ? CHECKERBOARD : { 'background-color': '#1c1c1e', 'background-image': 'none' });
+  }
+
+  // A gallery's dots, the one for the image shown brighter; none for a gallery too long for them to help.
+  function showDots() {
+    const count = gallery ? gallery.items.length : 0;
+    if (count < 2 || count > MAX_DOTS) {
+      dots.style.display = 'none';
+      return;
+    }
+    if (dots.children.length !== count) {
+      dots.replaceChildren(
+        ...Array.from({ length: count }, () => {
+          const dot = make('span');
+          setStyles(dot, { display: 'block', width: '6px', height: '6px', 'border-radius': '50%' });
+          return dot;
+        })
+      );
+    }
+    Array.prototype.forEach.call(dots.children, (dot, i) => {
+      dot.style.background = i === gallery.index ? '#fff' : 'rgba(255, 255, 255, 0.4)';
+    });
+    dots.style.display = 'flex';
+  }
+
+  // A video's corner: an icon while its sound is off, unless it has none to turn on, and one while it's paused.
+  function showVideoState() {
+    const video = shown && isVideo(full) ? full : null;
+    const [mutedIcon, pausedIcon] = videoState.children;
+    const muted = !!video && video.muted && video.mozHasAudio !== false;
+    const paused = !!video && video.paused;
+    mutedIcon.style.display = muted ? 'block' : 'none';
+    pausedIcon.style.display = paused ? 'block' : 'none';
+    videoState.style.display = muted || paused ? 'flex' : 'none';
   }
 
   const isVideo = (media) => !!media && media.localName === 'video';
@@ -737,22 +877,44 @@
     keysOpen = false;
     listenToWheel(false);
     if (!host) return;
+    // The popup fades out as it is, a video stopped at once, and then goes (finishHiding), unless another popup
+    // comes first, which finishes it at once (placeHost).
+    if (full) {
+      if (isVideo(full)) full.pause();
+      fading = full;
+      full = null;
+    }
+    if (fadeTimer) return;
+    if (FADE && host.style.display !== 'none') {
+      host.style.setProperty('opacity', '0', 'important');
+      fadeTimer = setTimeout(finishHiding, FADE);
+    } else {
+      finishHiding();
+    }
+  }
+
+  function finishHiding() {
+    clearTimeout(fadeTimer);
+    fadeTimer = 0;
+    host.style.setProperty('opacity', '0', 'important');
     host.style.setProperty('display', 'none', 'important');
     try {
       host.hidePopover();
     } catch (err) {
       // Already hidden.
     }
-    if (full) {
-      full.remove();
-      release(full);
-      full = null;
+    if (fading) {
+      fading.remove();
+      release(fading);
+      fading = null;
     }
     thumbImg.removeAttribute('src');
     counter.style.display = 'none';
     progress.style.display = 'none';
     hint.style.display = 'none';
     keysPanel.style.display = 'none';
+    videoState.style.display = 'none';
+    dots.style.display = 'none';
     clearTimeout(toastTimer);
     toast.style.display = 'none';
   }
@@ -817,7 +979,8 @@
     poll();
   }
 
-  // Muted, so it may play on its own, and looping, as a GIF does. Its progress shows on the popup's bar.
+  // Muted, so it may play on its own, and looping, as a GIF does. Its progress shows on the popup's bar, and whether
+  // it's muted or paused in its corner.
   function makeVideo() {
     const video = make('video');
     video.muted = true;
@@ -827,6 +990,7 @@
     ['timeupdate', 'durationchange', 'emptied'].forEach((type) =>
       video.addEventListener(type, () => video === full && showProgress())
     );
+    ['play', 'pause', 'volumechange'].forEach((type) => video.addEventListener(type, () => video === full && showVideoState()));
     return video;
   }
 
@@ -860,6 +1024,7 @@
     const item = gallery.items[to];
     gallery.index = to;
     counter.textContent = to + 1 + ' / ' + gallery.items.length;
+    showDots();
     clearTimeout(spinnerTimer);
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
     fetchMedia(item, (media) => {
@@ -875,6 +1040,7 @@
       spinner.style.display = 'none';
       gallery.index = from;
       counter.textContent = from + 1 + ' / ' + gallery.items.length;
+      showDots();
     });
   }
 
@@ -1047,14 +1213,17 @@
   async function save() {
     if (!shown || !full) return;
     const url = full.currentSrc || full.src;
-    let result = 'failed';
+    let answer = null;
     try {
       const file = await pageFile(url);
-      result = await browser.runtime.sendMessage({ type: 'save', url, filename: fileNameFor(url), file });
+      answer = await browser.runtime.sendMessage({ type: 'save', url, filename: fileNameFor(url), file });
     } catch (err) {
       // No background script to answer, or no file to send.
     }
-    note({ saved: 'Saved', canceled: 'Not saved' }[result] || "Couldn't save");
+    // Saved under the name it was given, so it can be found in the downloads.
+    const result = answer && answer.result;
+    if (result === 'saved') note(answer.name ? 'Saved ' + shortened(answer.name, 40) : 'Saved');
+    else note(result === 'canceled' ? 'Not saved' : "Couldn't save");
   }
 
   // O: the full-size image or video in a new tab, next to this one, which the background script opens.

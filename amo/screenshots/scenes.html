@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Largitude screenshots</title>
+<!-- The pages the listing's screenshots are taken on, made up for them: a photo journal (?photos), a post with
+     four photos (?post), and the settings page on a backdrop (?settings). make.mjs serves this page with the
+     pictures from art.mjs at /art/ and takes the screenshots. -->
+<style>
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .photos { background: #f6f4ef; color: #24211d; }
+  .photos header { display: flex; align-items: baseline; justify-content: space-between; max-width: 944px; margin: 0 auto; padding: 22px 0 0; }
+  .wordmark { font: 600 24px/1 Georgia, "Iowan Old Style", serif; letter-spacing: 0.01em; }
+  .photos nav { display: flex; gap: 26px; color: #6b655c; font-size: 14px; }
+  .photos main { max-width: 944px; margin: 0 auto; padding: 34px 0 40px; }
+  .photos h1 { font: 500 30px/1.2 Georgia, "Iowan Old Style", serif; margin: 0 0 4px; }
+  .photos .lede { color: #6b655c; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 26px 22px; }
+  .grid figure { margin: 0; }
+  .grid img { display: block; width: 300px; height: 188px; border-radius: 6px; }
+  .grid figcaption { margin-top: 8px; font-weight: 600; font-size: 14px; }
+  .grid figcaption span { display: block; font-weight: 400; color: #6b655c; font-size: 13px; }
+
+  .post-page { background: #eef1f5; color: #1c2330; }
+  .post-page main { width: 560px; margin: 0 0 0 120px; padding: 40px 0; }
+  .post-page article { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(20, 30, 50, 0.08); }
+  .byline { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #f4b7a0, #6f7fc4); }
+  .byline b { display: block; font-size: 15px; }
+  .byline span { color: #66707f; font-size: 14px; }
+  .post-page p { margin: 12px 0 14px; font-size: 16px; }
+  .four { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border-radius: 12px; overflow: hidden; }
+  .four img { display: block; width: 100%; height: 164px; object-fit: cover; }
+  .actions { display: flex; gap: 34px; margin-top: 12px; color: #66707f; font-size: 14px; }
+  .later { margin-top: 14px; height: 120px; background: #fff; border-radius: 14px; opacity: 0.7; }
+
+  .settings-page { background: #e8e8ed; color: #1d1d1f; }
+  .settings-page main { width: 492px; margin: 0 auto; padding: 30px 0; }
+  .settings-page h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 18px; font-weight: 600; }
+  .settings-page h1 img { width: 28px; height: 28px; }
+  .settings-page iframe { display: block; width: 100%; border: 0; border-radius: 10px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+
+  /* The mouse, drawn where make.mjs moved it, since a screenshot leaves it out. In the top layer, above the popup. */
+  #mouse { position: fixed; inset: auto; margin: 0; padding: 0; border: 0; background: none; overflow: visible; pointer-events: none; }
+  #mouse svg { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+</style>
+</head>
+<body>
+<script>
+  // The two extension APIs Largitude's content scripts use, as test/test-page.html stands them in: the settings
+  // are the defaults, and the clipboard is the page's.
+  window.browser = {
+    runtime: { sendMessage: async () => false },
+    storage: { onChanged: { addListener() {} } },
+  };
+  const scene = location.search.slice(1) || 'photos';
+</script>
+<div id="page"></div>
+<div id="mouse" popover="manual" aria-hidden="true"><svg width="22" height="30" viewBox="0 0 22 30">
+  <path d="M2 2 L2 24 L7.5 18.6 L11.4 27.4 L15 25.8 L11.2 17.2 L18.6 17.2 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+</svg></div>
+<script type="module">
+  const pictures = await fetch('/art/').then((response) => response.json());
+  const page = document.getElementById('page');
+  const name = (picture) => '/art/' + picture.name + '.svg';
+  if (scene === 'settings') {
+    // The settings page as it is, its settings only. make.mjs stands in the storage it reads.
+    document.body.className = 'settings-page';
+    page.innerHTML = '<main><h1><img src="/extension/icon.svg" alt="">Largitude settings</h1><iframe src="/extension/options.html" title="Settings"></iframe></main>';
+    const frame = page.querySelector('iframe');
+    await new Promise((resolve) => frame.addEventListener('load', resolve, { once: true }));
+    const settings = frame.contentDocument;
+    while (!settings.getElementById('excluded').value) await new Promise((resolve) => setTimeout(resolve, 20));
+    frame.style.height = settings.getElementById('options').getBoundingClientRect().bottom + 16 + 'px';
+    window.ready = true;
+  } else if (scene === 'post') {
+    document.body.className = 'post-page';
+    const four = pictures.slice(0, 4);
+    page.innerHTML = `<main>
+      <article>
+        <div class="byline"><div class="avatar"></div><div><b>Trail Notes</b><span>@trailnotes · 2h</span></div></div>
+        <p>Four days along the ridge, and a different sky every morning.</p>
+        <div class="four">${four.map((picture, i) => `<a href="/trail/status/42/photo/${i + 1}"><img src="${name(picture)}" alt="${picture.title}"></a>`).join('')}</div>
+        <div class="actions"><span>Reply</span><span>Share</span><span>Like · 214</span></div>
+      </article>
+      <div class="later"></div>
+    </main>`;
+  } else {
+    document.body.className = 'photos';
+    page.innerHTML = `<header><div class="wordmark">Ridgeline</div><nav><span>Journal</span><span>Places</span><span>Prints</span><span>About</span></nav></header>
+      <main>
+        <h1>Mountains &amp; water</h1>
+        <p class="lede">Nine pictures from a year of early mornings and late evenings.</p>
+        <div class="grid">${pictures.map((picture, i) => `<figure><a href="${name(picture)}"><img src="${name(picture)}" width="300" height="188" alt="${picture.title}"></a><figcaption>${picture.title}<span>${['Spring', 'Summer', 'Autumn', 'Winter'][i % 4]} 2026</span></figcaption></figure>`).join('')}</div>
+      </main>`;
+  }
+  if (scene !== 'settings') {
+    await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
+    // Largitude's content scripts, the ones the manifest lists, in order.
+    const manifest = await fetch('/extension/manifest.json').then((response) => response.json());
+    for (const src of manifest.content_scripts[0].js) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '/extension/' + src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.append(script);
+      });
+    }
+    window.ready = true;
+  }
+</script>
+</body>
+</html>

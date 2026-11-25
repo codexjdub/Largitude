@@ -167,8 +167,10 @@ test('the toolbar button turns Largitude off on a site, and back on, and says wh
 test('S saves the file under its name, with the type the server gives when the name has none', async () => {
   const bg = start({ fetched: { 'https://lh3.googleusercontent.com/AbCd=s0': { type: 'image/webp' } } });
   const sender = { tab: tab('https://example.com/', { incognito: true }) };
-  assert.equal(await bg.send({ type: 'save', url: 'https://i.redd.it/abc.png', filename: 'abc.png' }, sender), 'saved');
-  assert.equal(await bg.send({ type: 'save', url: 'https://lh3.googleusercontent.com/AbCd=s0', filename: 'AbCd=s0' }, sender), 'saved');
+  const saved = (message) => bg.send({ type: 'save', ...message }, sender).then(plain);
+  assert.deepEqual(await saved({ url: 'https://i.redd.it/abc.png', filename: 'abc.png' }), { result: 'saved', name: 'abc.png' });
+  // The answer has the name it was saved under, for the popup's note.
+  assert.deepEqual(await saved({ url: 'https://lh3.googleusercontent.com/AbCd=s0', filename: 'AbCd=s0' }), { result: 'saved', name: 'AbCd=s0.webp' });
   assert.deepEqual(
     bg.downloads.map(({ url, filename, incognito }) => ({ url, filename, incognito })),
     [
@@ -190,10 +192,12 @@ test('S: a name Firefox refuses leaves the name to Firefox; a canceled save is n
       return 1;
     },
   });
-  assert.equal(await bg.send({ type: 'save', url: 'https://example.com/shortcut.url', filename: 'shortcut.url' }, {}), 'saved');
+  const saved = (message) => bg.send({ type: 'save', ...message }, {}).then(plain);
+  // Named by Firefox, so the answer has no name.
+  assert.deepEqual(await saved({ url: 'https://example.com/shortcut.url', filename: 'shortcut.url' }), { result: 'saved', name: '' });
   assert.deepEqual(bg.downloads.map((download) => download.filename), ['shortcut.url', undefined]);
-  assert.equal(await bg.send({ type: 'save', url: 'https://example.com/ask.jpg', filename: 'ask.jpg' }, {}), 'canceled');
-  assert.equal(await bg.send({ type: 'save', url: 'javascript:alert(1)', filename: 'x.png' }, {}), 'failed');
+  assert.equal((await saved({ url: 'https://example.com/ask.jpg', filename: 'ask.jpg' })).result, 'canceled');
+  assert.equal((await saved({ url: 'javascript:alert(1)', filename: 'x.png' })).result, 'failed');
 });
 
 test("S and O: the page's own data: and blob: files, which the content script sends, are saved and opened", async () => {
@@ -201,13 +205,13 @@ test("S and O: the page's own data: and blob: files, which the content script se
   const bytes = vm.runInContext('new Uint8Array([137, 80, 78, 71]).buffer', bg.context);
   const file = { type: 'image/png', bytes };
   const sender = { tab: tab('https://chat.example/') };
-  assert.equal(await bg.send({ type: 'save', url: 'blob:https://chat.example/1234', filename: '', file }, sender), 'saved');
+  assert.deepEqual(plain(await bg.send({ type: 'save', url: 'blob:https://chat.example/1234', filename: '', file }, sender)), { result: 'saved', name: 'image.png' });
   assert.match(bg.downloads[0].url, /^blob:/);
   assert.equal(bg.downloads[0].filename, 'image.png');
   assert.equal(await bg.send({ type: 'open', url: 'data:image/png;base64,iVBORw0KGgo=', file }, sender), true);
   assert.match(bg.opened[0].url, /^blob:/);
   assert.equal(bg.opened[0].index, 3);
   // Without the file, such an address can't be saved or opened.
-  assert.equal(await bg.send({ type: 'save', url: 'blob:https://chat.example/1234', filename: '' }, sender), 'failed');
+  assert.equal((await bg.send({ type: 'save', url: 'blob:https://chat.example/1234', filename: '' }, sender)).result, 'failed');
   assert.equal(await bg.send({ type: 'open', url: 'data:image/png;base64,iVBORw0KGgo=' }, sender), false);
 });

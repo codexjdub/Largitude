@@ -1,0 +1,6 @@
+[
+  { "file": "1-popup.png", "caption": "Rest the mouse on a thumbnail or an image link: the image opens beside it, at full size." },
+  { "file": "2-gallery.png", "caption": "A post or gallery with several images: ← → or the mouse wheel moves through them." },
+  { "file": "3-keys.png", "caption": "Keys while it's open: save, copy, open in a tab, turn, flip, actual size. ? shows them all." },
+  { "file": "4-settings.png", "caption": "Settings: sites to leave alone, how long to wait, the line of keys. Each change is saved at once." }
+]

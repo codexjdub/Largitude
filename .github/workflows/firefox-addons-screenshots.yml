@@ -1,0 +1,33 @@
+# Replaces the screenshots on the add-on's page on Firefox Add-ons with the ones in amo/screenshots, captioned as
+# amo/screenshots/screenshots.json says, whenever they change on main. To run it again by hand: Actions → Firefox
+# Add-ons screenshots → Run workflow. Uses the same secrets as the Firefox Add-ons workflow.
+name: Firefox Add-ons screenshots
+
+on:
+  push:
+    branches: [main]
+    paths: ['amo/screenshots/*.png', amo/screenshots/screenshots.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, so that two runs don't each put up a set.
+concurrency:
+  group: firefox-addons-screenshots
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Replace the screenshots
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: node .github/scripts/amo-screenshots.mjs

@@ -115,10 +115,10 @@ test("a list Firefox can't hold isn't saved, stays as typed, and the page says w
   const list = page.fields.excluded;
   list.value = Array.from({ length: 512 }, (_, i) => `s${i}.example`).join('\n');
   await page.change();
-  assert.equal(page.fields.status.textContent, "Couldn't save: Firefox keeps 511 sites to leave alone at most.");
+  assert.equal(page.fields.status.textContent, 'Not saved: Firefox keeps 511 sites at most.');
   assert.deepEqual(Object.keys(page.items), ['options']);
   assert.equal(list.value.split('\n').length, 512);
   list.value = 'x'.repeat(9000) + '.example';
   await page.change();
-  assert.equal(page.fields.status.textContent, "Couldn't save: the list is longer than Firefox's synced storage holds.");
+  assert.equal(page.fields.status.textContent, 'Not saved: too long for Firefox to keep.');
 });

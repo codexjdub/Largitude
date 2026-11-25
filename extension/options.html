@@ -17,8 +17,12 @@
   textarea { width: 100%; max-width: 460px; height: 5.5em; box-sizing: border-box; }
   label.check { display: flex; gap: 8px; align-items: baseline; }
   fieldset .hint { max-width: 460px; }
-  #status { color: var(--muted); }
-  .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 10px; max-width: 460px; }
+  /* "Saved." goes beside the setting that changed, at the right of its first line, moving nothing. */
+  fieldset { position: relative; max-width: 460px; }
+  #status { position: absolute; top: 0; right: 0; margin: 0; color: var(--muted); font-size: 13px; }
+  .reference { max-width: 460px; border-top: 1px solid var(--line); padding-top: 14px; }
+  h2.title { margin: 0 0 6px; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: baseline; margin: 0; max-width: 460px; }
   .keys kbd { font: 12px/20px ui-monospace, Menlo, Consolas, monospace; justify-self: start; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; }
 </style>
 </head>
@@ -39,21 +43,6 @@
       <p class="hint">How long the mouse rests on an image before the popup opens. A longer wait keeps popups away while you move across a page.</p>
     </fieldset>
     <fieldset>
-      <span class="title">Keys while the popup is open</span>
-      <div class="keys">
-        <kbd>← →</kbd><span>Move through a gallery (the mouse wheel does too)</span>
-        <kbd>S</kbd><span>Save the image or video</span>
-        <kbd>O</kbd><span>Open it in a new tab</span>
-        <kbd>C</kbd><span>Copy the image</span>
-        <kbd>Shift C</kbd><span>Copy the image's or video's address</span>
-        <kbd>Z</kbd><span>Show the image at its actual size; move the mouse to look around it</span>
-        <kbd>R</kbd><span>Turn it a quarter turn clockwise</span>
-        <kbd>F</kbd><span>Flip it left to right</span>
-        <kbd>M</kbd><span>Turn a video's sound on or off</span>
-        <kbd>Space</kbd><span>Pause or play a video</span>
-        <kbd>?</kbd><span>Show these keys over the popup</span>
-        <kbd>Esc</kbd><span>Close it</span>
-      </div>
       <label class="check"><input id="keysUnderPopup" type="checkbox"> Show keys under the popup</label>
       <p class="hint">A line under each popup with a few keys for what it shows. Turn it off once you know them: the popup then gets that room too.</p>
     </fieldset>
@@ -61,8 +50,25 @@
       <label class="check"><input id="galleryWheelReversed" type="checkbox"> Reverse the mouse wheel in galleries</label>
       <p class="hint">The wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Turn this on for the opposite.</p>
     </fieldset>
+    <p id="status" role="status"></p>
   </form>
-  <p id="status" role="status"></p>
+  <section class="reference">
+    <h2 class="title">Keys while the popup is open</h2>
+    <div class="keys">
+      <kbd>← →</kbd><span>Move through a gallery (the mouse wheel does too)</span>
+      <kbd>S</kbd><span>Save the image or video</span>
+      <kbd>O</kbd><span>Open it in a new tab</span>
+      <kbd>C</kbd><span>Copy the image (on https pages, where Firefox allows it)</span>
+      <kbd>Shift C</kbd><span>Copy the image's or video's address</span>
+      <kbd>Z</kbd><span>Show the image at its actual size; move the mouse to look around it</span>
+      <kbd>R</kbd><span>Turn it a quarter turn clockwise</span>
+      <kbd>F</kbd><span>Flip it left to right</span>
+      <kbd>M</kbd><span>Turn a video's sound on or off</span>
+      <kbd>Space</kbd><span>Pause or play a video</span>
+      <kbd>?</kbd><span>Show these keys over the popup</span>
+      <kbd>Esc</kbd><span>Close it</span>
+    </div>
+  </section>
   <script src="helpers.js"></script>
   <script src="settings.js"></script>
   <script src="options.js"></script>

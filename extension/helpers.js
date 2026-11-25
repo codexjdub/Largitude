@@ -277,6 +277,14 @@ function withExtension(name, type) {
   return !name || hasMediaExtension(name) || !extension ? name : name + '.' + extension;
 }
 
+// `text` cut to `max` characters at most, from the middle, so that a file name keeps its end and its type.
+function shortened(text, max) {
+  const chars = Array.from(String(text));
+  if (chars.length <= max) return chars.join('');
+  const end = Math.floor((max - 1) / 2);
+  return chars.slice(0, max - 1 - end).join('') + '…' + chars.slice(chars.length - end).join('');
+}
+
 // ---- The page ----
 
 // The opacity of a color as getComputedStyle gives it, from 0 to 1: rgb() and rgba(), and the newer syntaxes the

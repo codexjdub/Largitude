@@ -92,10 +92,11 @@ async function typeAt(url) {
 // S: the image or video, at its address, or the file the content script sent for an address of the page's own.
 // Firefox's own setting decides whether to ask where to save. A private window's download stays private. A name
 // without a type, as Google's photo=s0, gets the one the server gives. Firefox refuses a name it would have to
-// change, such as one ending in .url, and then the file is saved under the name Firefox gives it.
+// change, such as one ending in .url, and then the file is saved under the name Firefox gives it. The answer is
+// { result: 'saved', 'canceled' or 'failed', name }, the name the file was asked to have, '' if Firefox named it.
 async function save(message, sender) {
   const own = isWebAddress(message.url) ? '' : ownAddress(message.file);
-  if (!own && !isWebAddress(message.url)) return 'failed';
+  if (!own && !isWebAddress(message.url)) return { result: 'failed', name: '' };
   const download = { url: own || message.url, conflictAction: 'uniquify', incognito: !!(sender.tab && sender.tab.incognito) };
   let name = typeof message.filename === 'string' ? message.filename : '';
   if (own) name = withExtension(/^video\//i.test(String(message.file.type)) ? 'video' : 'image', message.file.type);
@@ -109,9 +110,9 @@ async function save(message, sender) {
       delete download.filename;
       await browser.downloads.download(download);
     }
-    return 'saved';
+    return { result: 'saved', name: download.filename || '' };
   } catch (err) {
-    return /cancel/i.test(String(err && err.message)) ? 'canceled' : 'failed';
+    return { result: /cancel/i.test(String(err && err.message)) ? 'canceled' : 'failed', name: '' };
   } finally {
     // The download has read the file by the time it's finished; Firefox lets go of its own address with this
     // script anyway.

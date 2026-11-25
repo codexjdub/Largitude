@@ -378,14 +378,17 @@
 
   // ?standalone loads Largitude's content scripts, the ones the manifest lists, into the page itself, with a
   // stand-in for the two extension APIs they use, so the cases can be tried in any browser. Closed shadow roots
-  // are out of their reach there. The settings are window.standaloneSettings, which the checks set, telling the
-  // listeners it changed, and the file C copies comes from window.standaloneImage, which the checks set too.
+  // are out of their reach there. S is answered as saved, without a download. The settings are
+  // window.standaloneSettings, which the checks set, telling the listeners it changed, and the file C copies comes
+  // from window.standaloneImage, which the checks set too.
   if (new URLSearchParams(location.search).has('standalone')) {
     window.browser = {
       runtime: {
         sendMessage: async (message) => {
           if (message && message.type === 'settings') return window.standaloneSettings || false;
           if (message && message.type === 'image' && window.standaloneImage) return window.standaloneImage(message.url);
+          // Nothing is downloaded: S is told it saved under the name it gave.
+          if (message && message.type === 'save') return { result: 'saved', name: message.filename || 'image.png' };
           return false;
         },
       },
