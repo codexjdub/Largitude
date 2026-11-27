@@ -35,6 +35,14 @@ const {
   hasMediaExtension,
   withExtension,
   shortened,
+  growTransform,
+  turnTransform,
+  sizeFactor,
+  sizeLabel,
+  formatBytes,
+  formatTime,
+  kindOfFile,
+  seekTime,
 } = context;
 // Objects made inside the context have its own Object prototype, which deepEqual tells apart.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -451,4 +459,50 @@ test('shortened cuts a long name from the middle, keeping its end and type', () 
   assert.equal(shortened('a-very-long-file-name-from-somewhere-on-the-web.jpeg', 21).length, 21);
   // Letters beyond one UTF-16 unit aren't split.
   assert.equal(shortened('😀😀😀😀😀😀😀😀😀😀', 5), '😀😀…😀😀');
+});
+
+test('growTransform fits the popup inside the thumbnail, on its middle; turnTransform turns it back onto where it was', () => {
+  // A 800 × 600 popup at (300, 100), from a 200 × 100 thumbnail at (40, 60): half as tall, so 1/6 of the popup.
+  assert.equal(growTransform({ left: 40, top: 60, width: 200, height: 100 }, { left: 300, top: 100, width: 800, height: 600 }), 'translate(-560.0px, -290.0px) scale(0.1667)');
+  assert.equal(growTransform({ left: 0, top: 0, width: 0, height: 0 }, { left: 0, top: 0, width: 10, height: 10 }), '');
+  assert.equal(growTransform(null, { left: 0, top: 0, width: 10, height: 10 }), '');
+  // Turned in place, it starts a quarter turn back, at the same size.
+  assert.equal(turnTransform({ left: 100, top: 200, width: 800, height: 600 }, { left: 200, top: 100, width: 600, height: 800 }), 'translate(0.0px, 0.0px) rotate(-0.25turn) scale(1.0000)');
+  // Shrunk to fit the window when turned, it starts bigger.
+  assert.equal(turnTransform({ left: 0, top: 0, width: 800, height: 400 }, { left: 300, top: 0, width: 200, height: 400 }), 'translate(0.0px, 0.0px) rotate(-0.25turn) scale(2.0000)');
+});
+
+test('sizeFactor compares with the thumbnail file, or as shown on a sharper screen, and sizeLabel says it', () => {
+  assert.equal(sizeFactor({ width: 1600, height: 1200 }, { width: 400, height: 300 }, { width: 200, height: 150 }, 2), 4);
+  assert.equal(sizeFactor({ width: 1600, height: 1200 }, null, { width: 200, height: 150 }, 2), 4);
+  // Cut to a square on the page: as much bigger as its height grew.
+  assert.equal(sizeFactor({ width: 1600, height: 1000 }, null, { width: 250, height: 250 }), 4);
+  assert.equal(sizeFactor({ width: 1600, height: 1000 }, null, null), 0);
+  assert.equal(sizeLabel({ width: 1600, height: 1200 }, 4), '1600 × 1200 · 4× larger');
+  assert.equal(sizeLabel({ width: 1600, height: 1200 }, 3.33), '1600 × 1200 · 3.3× larger');
+  assert.equal(sizeLabel({ width: 4000, height: 3000 }, 12.6), '4000 × 3000 · 13× larger');
+  assert.equal(sizeLabel({ width: 640, height: 480 }, 1.1), '640 × 480');
+  assert.equal(sizeLabel({ width: 640, height: 480 }, 0), '640 × 480');
+});
+
+test('formatBytes and formatTime read as people say them', () => {
+  assert.deepEqual([0, 640, 1000, 8200, 820000, 999960, 2400000, 3.2e9].map(formatBytes), ['', '640 bytes', '1 KB', '8.2 KB', '820 KB', '1 MB', '2.4 MB', '3.2 GB']);
+  assert.deepEqual([0, 7.9, 65, 754, 3723, NaN].map(formatTime), ['0:00', '0:07', '1:05', '12:34', '1:02:03', '0:00']);
+});
+
+test('kindOfFile names the type from the file name, or a data: address', () => {
+  assert.equal(kindOfFile('https://example.com/a/photo.jpeg?w=10'), 'JPEG');
+  assert.equal(kindOfFile('https://example.com/clip.webm'), 'WEBM');
+  assert.equal(kindOfFile('https://pbs.twimg.com/media/AbC?format=png&name=orig'), 'PNG');
+  assert.equal(kindOfFile('data:image/svg+xml;base64,PHN2Zz4='), 'SVG');
+  assert.equal(kindOfFile('https://lh3.googleusercontent.com/AbCd=s0'), '');
+  assert.equal(kindOfFile('blob:https://example.com/1234'), '');
+});
+
+test('seekTime stays between the start and just before the end', () => {
+  assert.equal(seekTime(10, 5, 60), 15);
+  assert.equal(seekTime(2, -5, 60), 0);
+  assert.equal(seekTime(58, 5, 60), 59.75);
+  assert.equal(seekTime(10, 5, NaN), 15);
+  assert.equal(seekTime(10, 5, Infinity), 15);
 });

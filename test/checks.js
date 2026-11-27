@@ -9,6 +9,42 @@
   const WAIT = 'if "Wait before showing" isn\'t Normal in Largitude\'s settings, set it to Normal for the checks';
   const standalone = new URLSearchParams(location.search).has('standalone');
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // With ?standalone, Largitude's scripts run in the page, so the animations they start can be seen: each element
+  // animated, with its keyframes, from the latest.
+  const animated = [];
+  if (standalone) {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      animated.unshift({ el: this, keyframes: JSON.stringify(keyframes) });
+      return animate.call(this, keyframes, options);
+    };
+  }
+  // The popup put where it's going at once: whatever it's in the middle of, growing, turning or sliding, finished.
+  // A page out of sight may not move its animations on at all.
+  function settled(doc) {
+    const host = doc.querySelector('largitude-popup');
+    if (!host) return;
+    [host, ...host.shadowRoot.querySelectorAll('*')].forEach((el) =>
+      el.getAnimations().forEach((animation) => animation.effect.getComputedTiming().iterations !== Infinity && animation.finish())
+    );
+  }
+  // The transforms the popup is given while `act` runs and for a moment after: each it starts from or moves to.
+  async function transformsDuring(act) {
+    const host = document.querySelector('largitude-popup');
+    const seen = [];
+    const take = (style) => {
+      const match = /(?:^|;)\s*transform:\s*([^;!]+)/.exec(style || '');
+      if (match && seen[seen.length - 1] !== match[1].trim()) seen.push(match[1].trim());
+    };
+    const observer = host && new MutationObserver((records) => records.forEach((record) => take(record.oldValue)));
+    if (host) observer.observe(host, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+    await act();
+    await wait(50);
+    if (observer) observer.disconnect();
+    if (host) take(host.getAttribute('style'));
+    return seen;
+  }
   const results = document.getElementById('results');
   const lines = [];
 
@@ -36,25 +72,36 @@
     const host = doc.querySelector('largitude-popup');
     // Fading out (opacity 0), it counts as closed.
     if (!host || host.style.display === 'none' || host.style.opacity === '0' || !host.matches(':popover-open')) return { open: false };
-    const [stage, hint, keys] = host.shadowRoot.children;
+    const [stage, hint, keys, info] = host.shadowRoot.children;
     const children = [...stage.children];
     const media = children.filter((el) => el.localName === 'img' || el.localName === 'video');
     const full = media.length > 1 ? media[media.length - 1] : null;
     const src = full && full.style.display !== 'none' ? full.src.split('/').pop() : '';
     const shown = (test) => children.find((el) => el.style.display !== 'none' && test(el.textContent));
     const counter = shown((text) => /^\d+ \/ \d+$/.test(text));
-    const note = shown((text) => /[a-z]/i.test(text));
+    // The image's size, in the corner for a moment once it opens, and a note.
+    const size = shown((text) => /^\d+ × \d+/.test(text));
+    const toast = children[children.length - 1];
+    const note = shown((text) => /[a-z]/i.test(text) && !/^\d+ × \d+/.test(text));
+    // Where the popup is placed, which is where it is once it has grown or turned into place.
+    const px = (side) => parseFloat(host.style.getPropertyValue(side)) || 0;
+    const box = { left: px('left'), top: px('top'), width: px('width'), height: px('height') };
+    Object.assign(box, { right: box.left + box.width, bottom: box.top + box.height });
     return {
       open: true,
       src,
       counter: counter ? counter.textContent : '',
       note: note ? note.textContent : '',
-      box: host.getBoundingClientRect(),
+      size: size ? size.textContent : '',
+      // The note at the bottom, whatever it says: "0:05 / 0:42" too.
+      toast: toast.style.display !== 'none' ? toast.textContent : '',
+      box,
       full,
       video: full && full.localName === 'video' ? full : null,
       hint: hint.style.display !== 'none' ? hint.textContent : '',
       hintBox: hint.getBoundingClientRect(),
       keys: keys.style.display !== 'none' ? keys : null,
+      info: info && info.style.display !== 'none' ? info : null,
       stage,
       // A video's corner, with its icons, and a gallery's dots.
       videoState: children.find((el) => el.querySelector('svg')),
@@ -76,9 +123,11 @@
     return moveTo(doc, Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height / 2));
   }
 
-  // The top left corner is page margin: nothing to show there.
+  // The top left corner is page margin: nothing to show there. Largitude looks at where the pointer is once a
+  // frame, so a frame passes too, or a move straight back would be the only one it sees.
   async function away(doc) {
     moveTo(doc, 2, 2);
+    await new Promise((resolve) => doc.defaultView.requestAnimationFrame(() => resolve()));
     await until(() => !popupIn(doc).open, 1000);
   }
 
@@ -165,9 +214,20 @@
     await away(document);
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
+    const noteFor = async (pattern) => {
+      pressReaches('s');
+      return until(() => pattern.test(popupIn(document).note || ''), 1000);
+    };
     const reached = pressReaches('s');
+    // Run again, the page remembers it saved it the first time.
+    if (await until(() => /^Already saved/.test(popupIn(document).note || ''), 300)) pressReaches('s');
     const noted = await until(() => /^Saved full-1600x1200\.svg$/.test(popupIn(document).note || ''), 1000);
     report(!reached && noted, 'S saves, without reaching the page, and the popup says so with the name it was saved under', reached ? 'the page got the key' : `note "${popupIn(document).note}"`);
+    await wait(100);
+    const again = await noteFor(/^Already saved as full-1600x1200\.svg · S again for a copy$/);
+    const note = popupIn(document).note;
+    const copy = await noteFor(/^Saved full-1600x1200\.svg$/);
+    report(again && copy, 'S again says it was saved already, and S once more saves a copy', `then "${note}", then "${popupIn(document).note}"`);
     await away(document);
   }
 
@@ -277,12 +337,16 @@
       return across && down;
     };
     const same = (box) => ['left', 'top', 'width', 'height'].every((side) => Math.abs(box[side] - upright[side]) < 1);
-    const reached = pressReaches('r');
+    let reached = false;
+    const turning = await transformsDuring(() => (reached = pressReaches('r')));
+    report(still || turning.some((value) => /rotate\(-0\.25turn\)/.test(value)), 'R is seen turning into place', `transforms ${turning.join(' → ')}`);
+    settled(document);
     let popup = popupIn(document);
     let seen = popup.full ? popup.full.getBoundingClientRect() : null;
     const covered = !!seen && Math.abs(seen.width - popup.box.width) < 1 && Math.abs(seen.height - popup.box.height) < 1;
     report(!reached && popup.open && tall(popup.box) && sameMiddle(popup.box) && covered, 'R turns the image a quarter turn, the popup turning in place, without reaching the page', `box ${JSON.stringify(popup.box)} from ${JSON.stringify(upright)}, image ${JSON.stringify(seen)}`);
     ['r', 'r', 'r'].forEach(pressReaches);
+    settled(document);
     popup = popupIn(document);
     report(popup.open && same(popup.box) && popup.full.style.transform === 'none', 'four turns bring it back upright, where it was', `box ${JSON.stringify(popup.box)}, ${popup.full && popup.full.style.transform}`);
     pressReaches('r');
@@ -311,7 +375,9 @@
     const upright = popupIn(document).box;
     const same = (box) => ['left', 'top', 'width', 'height'].every((side) => Math.abs(box[side] - upright[side]) < 1);
     const transform = () => popupIn(document).full.style.transform;
-    const reached = pressReaches('f');
+    let reached = false;
+    const turning = await transformsDuring(() => (reached = pressReaches('f')));
+    report(still || turning.some((value) => /rotateY/.test(value)), 'F is seen turning over, as a card does', `transforms ${turning.join(' → ')}`);
     let popup = popupIn(document);
     report(!reached && popup.open && same(popup.box) && transform() === 'scaleX(-1)', 'F flips the image left to right, the popup staying where it is, without reaching the page', `box ${JSON.stringify(popup.box)}, ${transform()}`);
     const steps = [];
@@ -478,6 +544,7 @@
     await away(document);
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
+    settled(document);
     let popup = popupIn(document);
     const under = popup.hintBox.top >= popup.box.bottom && popup.hintBox.bottom <= document.documentElement.clientHeight;
     report(/save/.test(popup.hint) && /copy/.test(popup.hint) && /all keys/.test(popup.hint) && under, 'a line under the popup shows a few keys, and ? for all of them', `"${popup.hint}", line ${JSON.stringify(popup.hintBox)}, popup ${JSON.stringify(popup.box)}`);
@@ -505,15 +572,77 @@
   async function checkLook() {
     const el = document.querySelector('.case .target');
     await away(document);
+    const host = document.querySelector('largitude-popup');
+    const growing = await transformsDuring(async () => {
+      await hover(document, el);
+      await until(() => popupIn(document).open, 3000);
+    });
+    const fades = /opacity/.test(host.style.transition);
+    const grew = still || growing.some((value) => /scale\(0\.\d+\)/.test(value));
+    const checkered = /conic-gradient/.test(popupIn(document).stage.style.backgroundImage);
+    report(fades && grew && checkered, 'the popup fades in, growing out of the thumbnail, with a checkerboard behind the image', `transition "${host.style.transition}", transforms ${growing.join(' → ')}, background "${popupIn(document).stage.style.backgroundImage.slice(0, 40)}"`);
+    const blurred = /blur/.test(popupIn(document).stage.firstElementChild.style.filter);
+    report(blurred, 'the thumbnail standing in for the full image is blurred, so the image seems to come into focus', `filter "${popupIn(document).stage.firstElementChild.style.filter}"`);
+    let gone = false;
+    const shrinking = await transformsDuring(async () => {
+      moveTo(document, 2, 2);
+      gone = await until(() => host.style.display === 'none', 1000);
+    });
+    const shrank = still || shrinking.some((value) => /scale\(0\.\d+\)/.test(value));
+    report(!popupIn(document).open && gone && shrank, 'moving off, it fades out, shrinking back into the thumbnail, and goes', `display ${host.style.display}, transforms ${shrinking.join(' → ')}`);
+  }
+
+  // Once it opens, the image's size shows in the corner for a moment; I shows details over the popup, and ? and I
+  // take turns.
+  async function checkSizeAndInfo() {
+    const el = document.querySelector('.case .target');
+    await away(document);
     await hover(document, el);
     await until(() => popupIn(document).open, 3000);
-    const host = document.querySelector('largitude-popup');
-    const fades = /opacity/.test(host.style.transition);
-    const checkered = /conic-gradient/.test(popupIn(document).stage.style.backgroundImage);
-    report(fades && checkered, 'the popup fades in, with a checkerboard behind the image', `transition "${host.style.transition}", background "${popupIn(document).stage.style.backgroundImage.slice(0, 40)}"`);
-    moveTo(document, 2, 2);
-    const gone = await until(() => host.style.display === 'none', 1000);
-    report(!popupIn(document).open && gone, 'moving off, it fades out and goes', `display ${host.style.display}, opacity ${host.style.opacity}`);
+    const size = await until(() => popupIn(document).size, 500);
+    report(/^1600 × 1200( · [\d.]+× larger)?$/.test(size || ''), "once it opens, the image's size shows in its corner", `"${size || ''}"`);
+    const gone = await until(() => !popupIn(document).size, 3000);
+    report(gone, 'and goes after a moment', `still "${popupIn(document).size}"`);
+    const reached = pressReaches('i');
+    let popup = popupIn(document);
+    const text = popup.info ? popup.info.textContent : '';
+    report(!reached && /Namefull-1600x1200\.svg/.test(text) && /Size1600 × 1200/.test(text) && /TypeSVG/.test(text) && /From/.test(text), 'I shows the name, size, type and where it comes from, without reaching the page', reached ? 'the page got the key' : `"${text}"`);
+    pressReaches('?');
+    popup = popupIn(document);
+    report(!!popup.keys && !popup.info, '? over I shows the keys instead');
+    pressReaches('i');
+    popup = popupIn(document);
+    report(!popup.keys && !!popup.info, 'and I over ? the details');
+    pressReaches('i');
+    report(!popupIn(document).info, 'I again hides them');
+    await away(document);
+  }
+
+  // With ?standalone, where its animations can be seen: the key pressed lights up in the line of keys; a gallery's
+  // next image slides in from the side it's coming from; past the last, the image nudges and springs back.
+  async function checkMotion() {
+    const card = [...document.querySelectorAll('.case')].find((c) => /^X post with photos$/.test(c.querySelector('h2').textContent));
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    await until(() => popupIn(document).counter === '2 / 3', 3000);
+    const showing = (counter) => until(() => popupIn(document).counter === counter && popupIn(document).src === `gallery-${counter[0]}.svg`, 2000);
+    animated.length = 0;
+    pressReaches('ArrowRight');
+    await showing('3 / 3');
+    const lit = animated.some(({ el }) => el.localName === 'b' && el.textContent === '← →');
+    report(lit, 'the key pressed lights up in the line of keys', animated.map(({ el }) => el.localName).join(', ') || 'nothing animated');
+    const full = popupIn(document).full;
+    const slid = animated.some(({ el, keyframes }) => el === full && /translateX\(30%\)/.test(keyframes));
+    const out = animated.some(({ el, keyframes }) => el !== full && /translateX\(-30%\)/.test(keyframes));
+    report(still || (slid && out), "a gallery's next image slides in from the right as the one shown slides out to the left", animated.map(({ el, keyframes }) => `${el.localName} ${keyframes.slice(0, 60)}`).join('; '));
+    settled(document);
+    animated.length = 0;
+    pressReaches('ArrowRight');
+    await wait(50);
+    const stage = popupIn(document).stage;
+    const bumped = animated.some(({ el, keyframes }) => el === stage && /translateX\(-16px\)/.test(keyframes));
+    report(still || (bumped && popupIn(document).counter === '3 / 3'), 'past the last image, it nudges and springs back', `counter ${popupIn(document).counter}, ${animated.map(({ el }) => el.localName).join(', ') || 'nothing animated'}`);
+    await away(document);
   }
 
   // A video's corner shows while its sound is off and while it's paused; M and Space change it.
@@ -534,6 +663,13 @@
     pressReaches(' ');
     const paused = await until(() => icons() === 'paused', 1000);
     report(start === 'muted' && sound && paused, "a video's corner shows its sound off, then nothing once M turns it on, then paused after Space", `at first ${start}, then ${icons()}`);
+    // Paused at the start, → goes on, as far as just before the end of this short clip, and ← back to the start.
+    const video = popupIn(document).video;
+    video.currentTime = 0;
+    const on = !pressReaches('ArrowRight') && (await until(() => video.currentTime > 0.5, 1000));
+    const where = popupIn(document).toast;
+    const back = !pressReaches('ArrowLeft') && (await until(() => video.currentTime === 0, 1000));
+    report(on && back && /^0:0\d \/ 0:0\d$/.test(where), '→ and ← move a video on and back, saying where it is, without reaching the page', `on ${on} (${where}), back ${back}`);
     await away(document);
   }
 
@@ -647,6 +783,8 @@
     if (standalone) await checkCopyWithoutClipboard();
     await checkLateError();
     await checkLook();
+    await checkSizeAndInfo();
+    if (standalone) await checkMotion();
     await checkVideoState();
     await checkDots();
     const failed = lines.filter((line) => !line.ok).length;

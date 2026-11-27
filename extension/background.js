@@ -180,8 +180,8 @@ browser.action.onClicked.addListener(async (tab) => {
   }
 });
 
-// The button shows "off" on a tab whose site is left alone, and says what a click will do. On pages Largitude
-// doesn't work on (about:, file:), it's grayed out.
+// The button shows "off" on a tab whose site is left alone, with its icon dimmed, and says what a click will do.
+// On pages Largitude doesn't work on (about:, file:), it's grayed out.
 function showState(tab, excluded) {
   const host = pageHostOf(tab.url);
   const off = !!host && isExcluded(excluded, tab.url);
@@ -190,6 +190,7 @@ function showState(tab, excluded) {
     host ? browser.action.enable(tab.id) : browser.action.disable(tab.id),
     browser.action.setBadgeText({ tabId: tab.id, text: off ? 'off' : '' }),
     browser.action.setTitle({ tabId: tab.id, title }),
+    browser.action.setIcon({ tabId: tab.id, path: off ? 'icon-off.svg' : 'icon.svg' }),
   ];
   // A tab can close before its state is set.
   return Promise.all(calls).catch(() => {});

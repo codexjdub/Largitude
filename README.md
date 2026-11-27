@@ -6,14 +6,14 @@ A Firefox extension that shows images and videos full size when you rest the mou
 
 ## How to use it
 
-Rest the mouse on a thumbnail, a picture in a post, or a link to an image or video file. After a moment, the full-size version opens beside the pointer, fitted to the window, with a checkerboard showing through any transparent parts. Move away and it closes.
+Rest the mouse on a thumbnail, a picture in a post, or a link to an image or video file. After a moment, the full-size version grows out of the thumbnail to open beside the pointer, fitted to the window, with a checkerboard showing through any transparent parts. The thumbnail shows, softened, until the full-size image has loaded, and for a moment a corner says how big the image is and how much bigger than the thumbnail. Move away and it shrinks back into the thumbnail.
 
 While it's open:
 
 | Key | What it does |
 | --- | --- |
 | ← → or the mouse wheel | Move through a gallery |
-| S | Save the image or video |
+| S | Save the image or video; for one you've already saved, it says so, and S again saves a copy |
 | O | Open it in a new tab |
 | C | Copy the image (on https pages, where Firefox allows it) |
 | Shift+C | Copy the image's or video's address |
@@ -22,12 +22,16 @@ While it's open:
 | F | Flip the image or video left to right |
 | M | Turn a video's sound on or off |
 | Space | Pause or play a video |
+| ← → | Go back or on 5 seconds in a video that isn't in a gallery |
+| I | Show details over the popup: the file's name, size in pixels, type, size and site, and a video's length |
 | ? | Show every key over the popup, and hide them again |
 | Escape, or a click | Close it |
 
 A line under the popup shows a few of the keys for what it shows, such as M and Space for a video. Once you know them, you can turn it off in the settings, and the popup gets that room too.
 
-The mouse wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Past the last one, it scrolls the page again.
+The mouse wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Past the last one, it scrolls the page again. The keys you press light up in the line under the popup, the next image slides in, and at either end of a gallery the popup gives a little bump.
+
+If your system is set to reduce motion, the popup opens, closes, turns and moves through a gallery without moving.
 
 ## What it shows
 
@@ -43,7 +47,7 @@ It stays out of the way: the mouse goes right through the popup, it leaves alone
 
 ## Settings
 
-To turn Largitude off on a site, click its button in the toolbar while you're on that site: the button then shows "off" there. Click it again to turn Largitude back on. Firefox puts the button in the Extensions menu (the puzzle piece) at first; pin it to the toolbar to see the "off" badge.
+To turn Largitude off on a site, click its button in the toolbar while you're on that site: the button then shows "off" there and turns gray. Click it again to turn Largitude back on. Firefox puts the button in the Extensions menu (the puzzle piece) at first; pin it to the toolbar to see it.
 
 Largitude's settings are on its page in Firefox's **Add-ons and themes** (`about:addons`):
 

@@ -42,6 +42,7 @@ function start({ sync = {}, local = {}, fetched = {}, download = async () => 1 }
   });
   const badges = {};
   const titles = {};
+  const icons = {};
   const downloads = [];
   const opened = [];
   const fetches = [];
@@ -53,6 +54,7 @@ function start({ sync = {}, local = {}, fetched = {}, download = async () => 1 }
       setBadgeBackgroundColor: async () => {},
       setBadgeText: async ({ tabId, text }) => (badges[tabId] = text),
       setTitle: async ({ tabId, title }) => (titles[tabId] = title),
+      setIcon: async ({ tabId, path }) => (icons[tabId] = path),
       enable: async () => {},
       disable: async () => {},
     },
@@ -88,7 +90,7 @@ function start({ sync = {}, local = {}, fetched = {}, download = async () => 1 }
   });
   for (const [file, code] of files) vm.runInContext(code, context, { filename: file });
   const send = (message, sender = {}) => browser.runtime.onMessage.listeners[0](message, sender);
-  return { browser, context, reads, badges, titles, downloads, opened, fetches, send };
+  return { browser, context, reads, badges, titles, icons, downloads, opened, fetches, send };
 }
 
 const tab = (url, more = {}) => ({ id: 7, index: 2, windowId: 1, url, incognito: false, ...more });
@@ -150,8 +152,19 @@ test('the toolbar button turns Largitude off on a site, and back on, and says wh
   };
   await click(tab('https://www.example.com/page'));
   assert.equal(bg.browser.storage.sync.items['site:example.com'], 0);
+  // The tab's button says so, its icon dimmed.
+  bg.browser.tabs.query = async () => [tab('https://www.example.com/page')];
+  bg.browser.storage.onChanged.fire({}, 'sync');
+  await tick();
+  assert.equal(bg.badges[7], 'off');
+  assert.equal(bg.icons[7], 'icon-off.svg');
   await click(tab('https://shop.example.com/'));
   assert.ok(!('site:example.com' in bg.browser.storage.sync.items));
+  bg.browser.storage.onChanged.fire({}, 'sync');
+  await tick();
+  assert.equal(bg.badges[7], '');
+  assert.equal(bg.icons[7], 'icon.svg');
+  bg.browser.tabs.query = async () => [];
   // Pages Largitude doesn't work on are left alone.
   await click(tab('about:addons'));
   assert.deepEqual(Object.keys(bg.browser.storage.sync.items), ['options']);

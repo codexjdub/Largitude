@@ -398,6 +398,89 @@ function turnsOnceFlipped(turns) {
   return (4 - turns) % 4;
 }
 
+// The transform that makes the popup placed at `box` look as if it were inside `from`, the thumbnail it grows out
+// of or shrinks back into: scaled evenly to fit in it, about the popup's own middle, and moved onto its middle.
+// '' when either has no size.
+function growTransform(from, box) {
+  if (!from || !(from.width >= 1 && from.height >= 1 && box.width >= 1 && box.height >= 1)) return '';
+  const scale = Math.min(from.width / box.width, from.height / box.height);
+  const x = from.left + from.width / 2 - (box.left + box.width / 2);
+  const y = from.top + from.height / 2 - (box.top + box.height / 2);
+  return `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${scale.toFixed(4)})`;
+}
+
+// The transform that makes the popup R has just turned clockwise, now at `box`, look as it did at `before`:
+// turned back a quarter turn, scaled to its size and moved onto its middle, so that it can turn into place.
+function turnTransform(before, box) {
+  const scale = before.width / box.height;
+  const x = before.left + before.width / 2 - (box.left + box.width / 2);
+  const y = before.top + before.height / 2 - (box.top + box.height / 2);
+  return `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(-0.25turn) scale(${scale.toFixed(4)})`;
+}
+
+// How many times bigger an image of `natural` size is than its thumbnail: than the thumbnail's own file where its
+// size is known (`thumbSize`), or else than the thumbnail as the page shows it (`shownSize`) in the screen's pixels
+// (`pixelRatio` to a CSS pixel). Of width and height, the one that grew less, so that a thumbnail cut down to a
+// square doesn't overstate it. 0 when there's nothing to compare with.
+function sizeFactor(natural, thumbSize, shownSize, pixelRatio = 1) {
+  const sized = (size) => !!size && size.width > 0 && size.height > 0;
+  const base = sized(thumbSize)
+    ? thumbSize
+    : sized(shownSize)
+      ? { width: shownSize.width * pixelRatio, height: shownSize.height * pixelRatio }
+      : null;
+  return base ? Math.min(natural.width / base.width, natural.height / base.height) : 0;
+}
+
+// An image's size, and how many times bigger than its thumbnail when that's worth saying: "1600 × 1200 · 4×
+// larger".
+function sizeLabel(natural, factor) {
+  const size = `${natural.width} × ${natural.height}`;
+  if (!(factor >= 1.2)) return size;
+  const times = factor < 10 ? Math.round(factor * 10) / 10 : Math.round(factor);
+  return `${size} · ${times}× larger`;
+}
+
+// A file's size as people read it: "640 bytes", "820 KB", "2.4 MB". '' for none.
+function formatBytes(bytes) {
+  if (!(bytes > 0)) return '';
+  if (bytes < 1000) return Math.round(bytes) + ' bytes';
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1000;
+  let unit = 0;
+  const shown = () => (value < 9.95 ? Math.round(value * 10) / 10 : Math.round(value));
+  while (shown() >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit++;
+  }
+  return `${shown()} ${units[unit]}`;
+}
+
+// A time in seconds as a clock shows it: "0:07", "12:34", "1:02:03".
+function formatTime(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const [h, m, s] = [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60];
+  const two = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+}
+
+// What kind of file is at `url`, as people know it, "JPEG", "PNG", "MP4": from a data: address's type, or from the
+// file's name. '' when the address doesn't say.
+function kindOfFile(url) {
+  const data = /^data:([^;,]+)/i.exec(url);
+  const name = data ? 'file.' + extensionForType(data[1].trim().toLowerCase()) : fileNameFor(url);
+  if (!MEDIA_EXTENSION.test(name)) return '';
+  const extension = name.split('.').pop().toLowerCase();
+  return { jpg: 'JPEG', jpeg: 'JPEG', ogv: 'Ogg' }[extension] || extension.toUpperCase();
+}
+
+// Where a video goes `step` seconds on from `time` (back, for a negative step): no further back than its start,
+// and not past its end, for one whose `length` is known, which would only start it again.
+function seekTime(time, step, length) {
+  const to = Math.max(0, time + step);
+  return length > 0 && length < Infinity ? Math.min(to, Math.max(0, length - 0.25)) : to;
+}
+
 // Whether `bytes`, the first bytes of a file, are a PNG's: the eight that every PNG starts with.
 function isPngData(bytes) {
   return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => bytes[i] === byte);

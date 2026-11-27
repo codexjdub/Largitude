@@ -1,16 +1,17 @@
-Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. Videos play bigger too: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs, small videos on a page, and Reddit's videos, with their sound. The popup opens beside the pointer, fitted to the window, and closes when you move away.
+Largitude shows the full-size version of an image when you rest the mouse on it: a thumbnail, a picture in a post, or a link to an image file. Videos play bigger too: links to video files, Imgur GIFVs, X GIFs, Giphy GIFs, small videos on a page, and Reddit's videos, with their sound. The popup grows out of the thumbnail to open beside the pointer, fitted to the window, and shrinks back into it when you move away.
 
 • Finds the largest version a page offers: a link to the image file, the biggest of the sizes the page lists, or the image itself.
 • Knows where many sites keep the original uploads, so you see the full image rather than the page's smaller copy: Reddit, X, Bluesky, Imgur, Wikipedia, Amazon, IMDb, Pinterest, eBay and Flickr, and any site whose images come from WordPress, Next.js, Cloudinary, imgix or Google.
 • Galleries: on a Reddit gallery, or an X or Bluesky post with several images, the arrow keys or the mouse wheel move through them, with a counter and dots showing where you are.
-• Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses, and an icon in the corner shows when the sound is off or the video is paused.
-• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies the image and Shift+C its address, Z shows an image at its actual size, the mouse moving around it, R turns it a quarter turn, F flips it, and ? lists them all. A line under the popup shows the keys for what it shows, until you turn it off.
+• Videos play muted and looping, with a bar showing how far they've played. M turns the sound on, Space pauses, the arrow keys go back or on 5 seconds, and an icon in the corner shows when the sound is off or the video is paused.
+• Keys while it's open: S saves the image or video, O opens it in a new tab, C copies the image and Shift+C its address, Z shows an image at its actual size, the mouse moving around it, R turns it a quarter turn, F flips it, I shows its size, type, file size and site, and ? lists them all. A line under the popup shows the keys for what it shows, until you turn it off.
 • Google Images: the original image of each of the first 100 or so results.
 • YouTube: a video's largest still, for its thumbnails and links to it on other sites.
 • Sees through the transparent layers many sites put over their images, and into web components.
-• Opens at its final size right away, with the thumbnail standing in while the full image loads.
+• Opens at its final size right away, with the thumbnail standing in, softened, while the full image loads, and says for a moment how much bigger it is than the thumbnail.
+• Moves gently: a gallery's next image slides in, the popup bumps at a gallery's ends, R and F turn it into place, and the key you press lights up. None of it if your system is set to reduce motion.
 • Stays out of the way: the mouse goes right through it, it skips images already at full size and small icons, and a click, Escape or scrolling closes it.
-• Turn it off on a site with its toolbar button.
+• Turn it off on a site with its toolbar button, which turns gray there.
 • Settings: sites to leave alone, how long to wait before showing, the line of keys under the popup, and which way the wheel moves through a gallery. Changes apply at once, and follow you to your other computers if you sync add-ons with Firefox Sync.
 
 Largitude collects no data and sends nothing anywhere. It only loads the images and videos the page refers to, or larger versions of them at addresses worked out from those.
