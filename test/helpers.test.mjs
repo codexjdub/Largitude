@@ -28,6 +28,9 @@ const {
   turnInPlace,
   viewTransform,
   turnsOnceFlipped,
+  similarSize,
+  readableSize,
+  panOffset,
   isPngData,
   hoverDelayOf,
   rebasedList,
@@ -505,4 +508,36 @@ test('seekTime stays between the start and just before the end', () => {
   assert.equal(seekTime(58, 5, 60), 59.75);
   assert.equal(seekTime(10, 5, NaN), 15);
   assert.equal(seekTime(10, 5, Infinity), 15);
+});
+
+test('two images are alike in size when neither side is more than twice the other', () => {
+  assert.equal(similarSize({ width: 500, height: 280 }, { width: 250, height: 140 }), true);
+  assert.equal(similarSize({ width: 500, height: 280 }, { width: 40, height: 40 }), false);
+  assert.equal(similarSize({ width: 200, height: 150 }, { width: 500, height: 150 }), false);
+  assert.equal(similarSize({ width: 200, height: 150 }, { width: 500, height: 150 }, 3), true);
+  assert.equal(similarSize(null, { width: 10, height: 10 }), false);
+  assert.equal(similarSize({ width: 0, height: 10 }, { width: 10, height: 10 }), false);
+});
+
+test('a tall image too narrow to read whole is placed half as tall again as it is wide', () => {
+  // A phone screenshot, fitted whole at 160 of its 1170 px.
+  assert.deepEqual(plain(readableSize({ width: 1170, height: 5000 }, { width: 160, height: 684 })), { width: 1170, height: 1755 });
+  // Not tall enough, or wide enough whole.
+  assert.equal(readableSize({ width: 1000, height: 1800 }, { width: 200, height: 360 }), null);
+  assert.equal(readableSize({ width: 400, height: 1200 }, { width: 250, height: 750 }), null);
+  assert.equal(readableSize({ width: 0, height: 100 }, null), null);
+});
+
+test('a tall image moves up as the pointer moves down its thumbnail', () => {
+  const natural = { width: 600, height: 3000 };
+  const rect = { top: 100, height: 300 };
+  // Shown 300 wide, it's 1500 tall: 1100 more than a popup 400 tall.
+  assert.equal(panOffset(natural, 300, 400, 100, rect), 0);
+  assert.equal(panOffset(natural, 300, 400, 130, rect), 0);
+  assert.equal(panOffset(natural, 300, 400, 250, rect), -550);
+  assert.equal(panOffset(natural, 300, 400, 370, rect), -1100);
+  assert.equal(panOffset(natural, 300, 400, 900, rect), -1100);
+  // All of it in view, or no thumbnail to go by.
+  assert.equal(panOffset(natural, 60, 400, 250, rect), 0);
+  assert.equal(panOffset(natural, 300, 400, 250, null), 0);
 });

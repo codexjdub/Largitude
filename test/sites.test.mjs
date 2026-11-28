@@ -27,7 +27,7 @@ test('each site has a name, [find, replace] rules and, optionally, a gallery', (
       assert.ok(!find.global && !find.sticky, `${site.name}: ${find}`);
       assert.ok(typeof replace === 'string' || typeof replace === 'function', `${site.name}: ${find}`);
     }
-    for (const hook of ['gallery', 'standIn', 'leaveAlone', 'video', 'original', 'fileName']) {
+    for (const hook of ['gallery', 'pageImages', 'standIn', 'leaveAlone', 'video', 'original', 'fileName']) {
       assert.ok(site[hook] === undefined || typeof site[hook] === 'function', `${site.name}: ${hook}`);
     }
   }
@@ -73,6 +73,31 @@ test("Reddit: a video's files, largest first, from its player", () => {
   assert.equal(videoIn(player({ 'packaged-media-json': '{"playbackMp4s":' })), null);
   const odd = [{ source: { dimensions: { width: 1, height: 1 }, url: 'javascript:alert(1)' } }, { source: null }, {}];
   assert.equal(videoIn(player({ 'packaged-media-json': JSON.stringify({ playbackMp4s: { permutations: odd } }) })), null);
+});
+
+test("X: ← → go on through the page's photos and GIFs, leaving out profile pictures and link cards", () => {
+  const x = SITES.find((site) => site.name === 'X');
+  // A made-up page: nodes with the links and posts they're in.
+  const article = {};
+  const node = (localName, { link, src, inPost = true } = {}) => ({ localName, src: src || '', link: link && { pathname: link }, inPost });
+  const photo1 = node('img', { link: '/a/status/1/photo/1' });
+  const photo2 = node('img', { link: '/a/status/1/photo/2' });
+  const quoted = node('img', { link: '/b/status/2/photo/1' });
+  const avatar = node('img', { link: '/a' });
+  const gif = node('video', { src: 'https://video.twimg.com/tweet_video/AbC.mp4' });
+  const stream = node('video', { src: 'blob:https://x.com/1234' });
+  const elsewhere = node('img', { link: '/c/status/3/photo/1', inPost: false });
+  const all = [avatar, photo1, photo2, quoted, gif, stream, elsewhere];
+  const page = {
+    closestLink: (el) => el.link || null,
+    closestAcross: (el, selector) => (selector === 'article' && all.some((n) => (n.link === el || n === el) && n.inPost) ? article : null),
+    queryAll: () => all,
+  };
+  assert.deepEqual(x.pageImages(photo2, page), [photo1, photo2, quoted, gif]);
+  assert.deepEqual(x.pageImages(gif, page), [photo1, photo2, quoted, gif]);
+  assert.equal(x.pageImages(avatar, page), null);
+  assert.equal(x.pageImages(stream, page), null);
+  assert.equal(x.pageImages(elsewhere, page), null);
 });
 
 test('X: photos, profile pictures and banners at their original size', () => {

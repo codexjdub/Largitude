@@ -21,6 +21,9 @@
   const WHEEL_SETTLE = 150; // ms without wheel movement that ends a gesture, which moves one image at most
   const SHOWABLE_TYPES = /^image\/(?:jpeg|png|gif|webp|avif|bmp|svg\+xml)$/i;
   const HINT_ROOM = 32; // px kept under the popup for the line of keys: its 26 and the 6 between them
+  const WARM_FOR = 1000; // ms after a popup closes, as the pointer moves on, in which the next image opens at once
+  const WARM_DELAY = 90; // ms the pointer rests on the next image then, still, before it opens
+  const TALL_THUMB = 60; // px: a thumbnail at least this tall moves a tall image along under the pointer
 
   let enabled = false;
   let delay = DELAY; // the "Wait before showing" setting
@@ -35,8 +38,16 @@
   let sizeFrame = 0;
   let loading = null; // the <img> or <video> being loaded, shown once its size is known
   let shown = false;
-  let gallery = null; // while the popup shows one of several images: { items: [{ thumb, thumbSize, urls }], index }
+  let gallery = null; // while the popup shows one of several images: { items: [{ el, thumb, thumbSize, urls }], index }
   let preloaded = []; // the gallery's images on either side of the one shown, loading in advance
+  let warm = null; // just after a popup closed as the pointer moved on: { until, size }, when it ends and the image's size
+  let warmTimer = false; // whether the popup's timer is the short one of a warm hover, started afresh as the pointer moves
+  let loadTimer = 0;
+  let loadingFor = null; // the hovered image or video whose loading has started, before the wait is over or once it is
+  let arrived = null; // what that loading gave, while the wait isn't over yet: { media }
+  let due = false; // whether the wait is over, so what arrives shows at once
+  let steering = false; // whether ← → have moved the popup on to the page's other images, the mouse still since
+  let pageStepping = false; // while ← → look for the page's next image
 
   // ---- Finding the image under the pointer ----
 
@@ -66,10 +77,10 @@
   // The image or video under the point, unless the site rules leave it to the site, as YouTube's own thumbnails
   // on YouTube, which play a preview of their own.
   function findImage(x, y) {
-    const found = findAnyImage(x, y);
-    const own = found && [found.thumb].concat(found.urls).some((url) => !!url && isLeftAlone(url, location.href));
-    return own ? null : found;
+    return allowed(findAnyImage(x, y));
   }
+
+  const allowed = (found) => (found && ![found.thumb].concat(found.urls).some((url) => !!url && isLeftAlone(url, location.href)) ? found : null);
 
   function findAnyImage(x, y) {
     const layers = layersAt(x, y).slice(0, MAX_LAYERS);
@@ -322,15 +333,125 @@
 
   // ---- Galleries ----
 
-  // What the site rules' gallery functions may use to look around the page.
-  const page = { closestAcross, closestLink };
+  // What the site rules' gallery and pageImages functions may use to look around the page.
+  const page = { closestAcross, closestLink, queryAll: (selector) => Array.from(document.querySelectorAll(selector)) };
 
   // The images of the post `el` is in, when it has several: { items, index }, where items[index] is `el`'s. The
   // site rules know which elements make up a post.
   function galleryOf(el) {
     for (const site of SITES) {
       const found = site.gallery ? site.gallery(el, page) : null;
-      if (found) return { items: found.images.map((img) => sourcesOf(img)), index: found.index };
+      if (found) return { items: found.images.map((img) => ({ ...sourcesOf(img), el: img })), index: found.index };
+    }
+    return null;
+  }
+
+  // ---- The page's images ----
+
+  // ← → past a gallery's ends, or on an image in none, move on to the page's next or previous image of the same
+  // kind, scrolled into view. A site's rule lists them where it knows which they are (X: the photos and GIFs of
+  // its posts), and the page may then load more as it scrolls; elsewhere they're the page's images shown at about
+  // the same size as `el`. In page order: { els, listed }, `listed` when a site's rule gave them.
+  function pageImages(el) {
+    if (!el) return { els: [], listed: false };
+    for (const site of SITES) {
+      const els = site.pageImages ? site.pageImages(el, page) : null;
+      if (els) return { els, listed: true };
+    }
+    const size = el.localName === 'img' ? rectOf(el) : null;
+    if (!size) return { els: [], listed: false };
+    const els = Array.prototype.filter.call(document.images, (img) => img === el || similarSize(rectOf(img), size, 3));
+    return { els, listed: false };
+  }
+
+  // The first of `els` after `ref` in the page, or for a step back the last before it, that can be shown, other
+  // than `skip`, the images of the gallery shown.
+  function neighbor(els, ref, step, skip) {
+    const order = step > 0 ? els : els.slice().reverse();
+    for (const el of order) {
+      if (el === ref || skip.has(el) || !el.isConnected) continue;
+      const following = !!(ref.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (following === step > 0 && allowed(imageOf(el))) return el;
+    }
+    return null;
+  }
+
+  const inView = (el) => {
+    const rect = el.getBoundingClientRect();
+    const view = viewport();
+    return rect.top >= 0 && rect.left >= 0 && rect.bottom <= view.height && rect.right <= view.width;
+  };
+  const frames = (count) => new Promise((resolve) => (function next(left) {
+    if (left) requestAnimationFrame(() => next(left - 1));
+    else resolve();
+  })(count));
+
+  // Shows the page's next image (`step` 1) or previous one (-1) after the one shown, scrolled into view, with the
+  // popup where it is. Past the last one a site lists, the page scrolls on, for it to load more.
+  async function pageStep(step) {
+    if (pageStepping) return;
+    const target = hovered;
+    const ref = current && current.el;
+    if (!target || !ref || !ref.isConnected) {
+      bump(step);
+      return;
+    }
+    const skip = new Set(gallery ? gallery.items.map((item) => item.el) : []);
+    const list = pageImages(ref);
+    pageStepping = true;
+    steering = true;
+    try {
+      let next = neighbor(list.els, ref, step, skip);
+      if (!next && list.listed) {
+        clearTimeout(spinnerTimer);
+        spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
+        next = await loadMore(ref, step, skip, target);
+      }
+      if (next && !inView(next)) next.scrollIntoView({ block: 'center', inline: 'nearest' });
+      // A lazy image gets its address once in view.
+      if (next) await frames(2);
+      const item = next && hovered === target ? allowed(imageOf(next)) : null;
+      if (!item) {
+        clearTimeout(spinnerTimer);
+        spinner.style.display = 'none';
+        if (hovered === target) bump(step);
+        return;
+      }
+      const nextGallery = galleryOf(next);
+      hovered = item;
+      clearTimeout(spinnerTimer);
+      spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
+      fetchMedia(item, (media) => {
+        if (hovered !== item) return;
+        const box = media && boxFor(media, item, false);
+        if (!box) {
+          // Nothing to show for this one: the next step goes on past it.
+          clearTimeout(spinnerTimer);
+          spinner.style.display = 'none';
+          current = item;
+          note("Couldn't load this one");
+          return;
+        }
+        gallery = nextGallery;
+        showMedia(item, media, box, step);
+        preloadAround();
+      });
+    } finally {
+      pageStepping = false;
+    }
+  }
+
+  // Scrolls the page on by most of a window, for a site that adds images as it scrolls, and waits a moment for
+  // the next image past `ref`. Null when the page can't scroll that way, or nothing comes.
+  async function loadMore(ref, step, skip, target) {
+    const before = scrollY;
+    scrollBy(0, step * Math.round(viewport().height * 0.8));
+    if (scrollY === before) return null;
+    for (let tries = 0; tries < 8; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      if (hovered !== target || !ref.isConnected) return null;
+      const next = neighbor(pageImages(ref).els, ref, step, skip);
+      if (next) return next;
     }
     return null;
   }
@@ -367,6 +488,9 @@
   let infoPanel = null; // I's details about the image or video shown, over the popup
   let infoOpen = false;
   let hintTimer = 0;
+  let tall = null; // a tall image shown wide enough to read, moved along under the pointer: { natural, whole }
+  let tallBar = null; // a thin bar at the right, showing which part of the tall image is in view
+  let morphTimer = 0;
   const savedNames = new Map(); // the files S saved from this page, by address, with the names they were saved under
   let saveAgain = ''; // the address S was just told was saved already, which S again saves another copy of
   let saveAgainTimer = 0;
@@ -378,7 +502,7 @@
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   // What each key does, for the panel ? opens, in groups.
   const KEYS = [
-    ['Viewing', [['← →', 'Move through a gallery'], ['Z', 'Actual size'], ['R', 'Turn a quarter turn'], ['F', 'Flip left to right']]],
+    ['Viewing', [['← →', 'Next or previous image'], ['Z', 'Actual size'], ['R', 'Turn a quarter turn'], ['F', 'Flip left to right']]],
     ['Saving', [['S', 'Save'], ['O', 'Open in a new tab'], ['C', 'Copy the image'], ['Shift C', 'Copy the address']]],
     ['Video', [['M', 'Sound on or off'], ['Space', 'Pause or play'], ['← →', 'Back or on 5 seconds']]],
     ['The popup', [['I', 'Details: size, type, file'], ['?', 'Show or hide these keys'], ['Esc', 'Close']]],
@@ -548,7 +672,19 @@
       transition: `opacity ${FADE * 2}ms ease-out`,
       display: 'none',
     });
-    stage.append(thumbImg, spinner, counter, progress, videoState, dots, sizeTag, toast);
+    // For a tall image shown wide, which part of it is in view: a thin bar along the right edge.
+    tallBar = make('div');
+    setStyles(tallBar, {
+      position: 'absolute',
+      'z-index': '1',
+      right: '3px',
+      width: '3px',
+      'border-radius': '2px',
+      background: 'rgba(255, 255, 255, 0.7)',
+      'box-shadow': '0 0 0 1px rgba(0, 0, 0, 0.25)',
+      display: 'none',
+    });
+    stage.append(thumbImg, spinner, counter, progress, videoState, dots, sizeTag, tallBar, toast);
     // Centered under the popup.
     hint = make('div');
     setStyles(hint, {
@@ -686,13 +822,23 @@
     });
   }
 
-  // Puts the popup at `box`. Appearing, it fades in, growing out of the thumbnail `from` when there is one.
-  function placeHost(box, from) {
+  // Puts the popup at `box`. Appearing, it fades in, growing out of the thumbnail `from` when there is one; with
+  // `reshape`, as for a gallery's next image, it changes from its size and place to the new ones rather than snap.
+  function placeHost(box, from, reshape) {
     if (!host) createHost();
     if (!host.isConnected) root.append(host);
     // One fading out is done with at once.
     if (fadeTimer) finishHiding();
     const appearing = host.style.display === 'none';
+    const moved = !!hostBox && ['left', 'top', 'width', 'height'].some((side) => Math.round(hostBox[side]) !== Math.round(box[side]));
+    clearTimeout(morphTimer);
+    if (reshape && MOTION && !appearing && moved) {
+      const sides = ['left', 'top', 'width', 'height'].map((side) => `${side} ${MOTION}ms ${EASE}`).join(', ');
+      host.style.setProperty('transition', `${TRANSITION}, ${sides}`, 'important');
+      morphTimer = setTimeout(() => host.style.setProperty('transition', TRANSITION, 'important'), MOTION);
+    } else {
+      host.style.setProperty('transition', TRANSITION, 'important');
+    }
     setStyles(
       host,
       { display: 'block', left: box.left + 'px', top: box.top + 'px', width: box.width + 'px', height: box.height + 'px' },
@@ -761,9 +907,10 @@
     }
     // C only where it can copy the image, on https pages.
     const copy = canCopyImages() ? [['C', 'copy']] : [];
+    const next = gallery || pageImages(current && current.el).els.length > 1;
     const keys = isVideo(full)
-      ? [['M', 'sound'], ['Space', 'pause'], ...(gallery ? [] : [['← →', 'skip']]), ['S', 'save']]
-      : gallery
+      ? [['M', 'sound'], ['Space', 'pause'], ['← →', arrowsMove() ? 'next' : 'skip'], ['S', 'save']]
+      : next
         ? [['← →', 'next'], ['S', 'save'], ...copy]
         : [['S', 'save'], ...copy, ['Z', 'actual size']];
     hint.replaceChildren(
@@ -776,6 +923,10 @@
     hint.style.display = 'flex';
     keepInWindow(hint);
   }
+
+  // Whether ← → move on to another image rather than back or on in the video shown: in a gallery, and among the
+  // page's images a site lists, as X's GIFs among its photos; for an image, always.
+  const arrowsMove = () => !isVideo(full) || !!gallery || pageImages(current && current.el).listed;
 
   // The room to keep under the popup for the line of keys.
   const hintRoom = () => (keysUnder ? HINT_ROOM : 0);
@@ -811,6 +962,8 @@
     if (!host) createHost();
     const before = hostBox;
     const turnedBefore = turns || flipped;
+    const tallBefore = !!tall;
+    tall = box.tall || null;
     const appearing = host.style.display === 'none' || !!fadeTimer || spinnerOnly;
     actualSize = null;
     turns = 0;
@@ -823,7 +976,7 @@
     // goes once the image has arrived, so it doesn't show through its transparent parts. A video shows it as its
     // poster until the first frame, which keeps the thumbnail's own shape.
     const video = isVideo(media);
-    if (!video && !media.complete && item.thumb && item.thumb !== media.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(media))) {
+    if (!video && !tall && !media.complete && item.thumb && item.thumb !== media.src && item.thumbSize && sameShape(item.thumbSize, sizeOf(media))) {
       thumbImg.src = item.thumb;
       thumbImg.style.display = 'block';
       media.addEventListener('load', () => media === full && (thumbImg.style.display = 'none'), { once: true });
@@ -832,20 +985,23 @@
       thumbImg.style.display = 'none';
     }
     if (video && item.thumb) media.poster = item.thumb;
-    const sliding = !!(MOTION && slide && full && full !== media && shown && before && !turnedBefore);
+    const sliding = !!(MOTION && slide && full && full !== media && shown && before && !turnedBefore && !tallBefore && !tall);
     if (full !== media) {
-      if (sliding) slideOut(full, slide, before, box);
+      if (sliding) slideOut(full, slide, before);
       else if (full) drop(full);
       full = media;
       stage.insertBefore(media, spinner);
     }
-    setStyles(media, FILL);
+    // Covering the popup, the image keeps its shape while the popup changes from the last image's shape to its own.
+    setStyles(media, { ...FILL, 'object-fit': 'cover' });
     media.style.display = 'block';
     // The checkerboard shows through an image's transparent parts; a video has none.
     checkered(!video);
     if (gallery) counter.textContent = gallery.index + 1 + ' / ' + gallery.items.length;
     counter.style.display = gallery ? 'block' : 'none';
-    placeHost(box, appearing && item.el ? rectOf(item.el) : null);
+    placeHost(box, appearing && item.el ? rectOf(item.el) : null, sliding);
+    if (tall) panTall();
+    else tallBar.style.display = 'none';
     if (sliding) {
       slideIn(media, slide);
       if (thumbImg.style.display !== 'none') slideIn(thumbImg, slide);
@@ -864,13 +1020,13 @@
   }
 
   // A gallery's image going out towards the side away from `step`, at the size it was shown at in the popup's box
-  // `before`, centered in the new one, `box`.
-  function slideOut(old, step, before, box) {
+  // `before`, centered in the popup as it changes to the new one.
+  function slideOut(old, step, before) {
     if (leaving) drop(leaving);
     leaving = old;
     setStyles(old, {
-      left: (box.width - before.width) / 2 + 'px',
-      top: (box.height - before.height) / 2 + 'px',
+      left: `calc(50% - ${before.width / 2}px)`,
+      top: `calc(50% - ${before.height / 2}px)`,
       width: before.width + 'px',
       height: before.height + 'px',
     });
@@ -880,6 +1036,17 @@
       fill: 'forwards',
     });
     out.onfinish = () => leaving === old && drop(old);
+  }
+
+  // A tall image shown wide (tall), as wide as the popup, moved up as the pointer moves down the thumbnail, from
+  // its top to its bottom; shown from the top when ← → brought it, the pointer elsewhere.
+  function panTall() {
+    if (!tall || !full || actualSize) return;
+    const { width, height: boxHeight } = hostBox;
+    const height = Math.round((tall.natural.height * width) / tall.natural.width);
+    const top = steering ? 0 : panOffset(tall.natural, width, boxHeight, pointer.y, rectOf(hovered && hovered.el));
+    setStyles(full, { left: '0', top: top + 'px', width: width + 'px', height: height + 'px', transform: viewTransform(0, flipped) });
+    setStyles(tallBar, { display: 'block', top: (-top / height) * 100 + '%', height: (boxHeight / height) * 100 + '%' });
   }
 
   // `el` coming in from the side of `step`.
@@ -1006,8 +1173,15 @@
   function hide() {
     clearTimeout(timer);
     clearTimeout(spinnerTimer);
+    clearTimeout(loadTimer);
     cancelAnimationFrame(sizeFrame);
-    timer = spinnerTimer = sizeFrame = 0;
+    timer = spinnerTimer = sizeFrame = loadTimer = 0;
+    warmTimer = false;
+    loadingFor = null;
+    arrived = null;
+    due = false;
+    steering = false;
+    tall = null;
     // Releasing stops the download; the handlers below ignore an image or video that's no longer `loading`.
     const old = loading;
     loading = null;
@@ -1072,6 +1246,7 @@
     dots.style.display = 'none';
     clearTimeout(sizeTagTimer);
     sizeTag.style.display = 'none';
+    tallBar.style.display = 'none';
     infoPanel.style.display = 'none';
     clearTimeout(hintTimer);
     hint.style.visibility = '';
@@ -1081,6 +1256,7 @@
 
   function dismiss() {
     if (hovered) dismissed = hovered.el;
+    warm = null;
     hide();
   }
 
@@ -1155,33 +1331,75 @@
   }
 
   // The image the page shows reports the size it's shown at when the browser picked it from a srcset, not its
-  // own, so the size comes from loading it afresh, from the cache when it's the same file.
+  // own, so the size comes from loading it afresh, from the cache when it's the same file. The loading starts
+  // before the wait is over (load), and the popup opens once both are.
   function open() {
     timer = 0;
     const target = hovered;
     if (!target) return;
+    due = true;
+    if (arrived) {
+      present(target);
+      return;
+    }
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, true);
+    load();
+  }
+
+  // Starts loading the hovered image or video, once.
+  function load() {
+    clearTimeout(loadTimer);
+    loadTimer = 0;
+    const target = hovered;
+    if (!target || loadingFor === target) return;
+    loadingFor = target;
     fetchMedia(target, (media) => {
       if (target !== hovered) return;
-      const box = media && placePopup(sizeOf(media), pointer, viewport(), target.shownSize, hintRoom());
-      if (!box || !isWorthShowing(box, target.shownSize)) {
-        dismiss();
-        return;
-      }
-      gallery = galleryOf(target.el);
-      showMedia(target, media, box);
-      showSizeTag();
-      preloadAround();
+      arrived = { media };
+      if (due) present(target);
     });
   }
 
-  // Moves `step` images through the gallery. The image shown stays until the next one's size is known.
+  // Opens the popup with what arrived for `target`, unless there's nothing to show, or nothing more than the page
+  // shows already.
+  function present(target) {
+    const media = arrived.media;
+    arrived = null;
+    const box = media && boxFor(media, target, true);
+    if (!box) {
+      dismiss();
+      return;
+    }
+    gallery = galleryOf(target.el);
+    showMedia(target, media, box);
+    showSizeTag();
+    preloadAround();
+  }
+
+  // Where the popup goes for `media`, shown for `item`, or null when it can't, or when `worth` asks that it show
+  // more than the page does and it wouldn't. A tall image that would come out too narrow to read opens wider, to
+  // be read by moving down the thumbnail (panTall): the box then carries `tall`, for showMedia.
+  function boxFor(media, item, worth) {
+    const natural = sizeOf(media);
+    const shownSize = worth ? item.shownSize : null;
+    const whole = placePopup(natural, pointer, viewport(), shownSize, hintRoom());
+    const readable = readableSize(natural, whole);
+    const thumb = rectOf(hovered && hovered.el);
+    if (readable && thumb && thumb.height >= TALL_THUMB) {
+      const box = placePopup(readable, pointer, viewport(), shownSize, hintRoom());
+      if (box && (!whole || box.width >= whole.width * 1.5)) return { ...box, tall: { natural, whole } };
+    }
+    return whole && (!worth || isWorthShowing(whole, item.shownSize)) ? whole : null;
+  }
+
+  // Moves `step` images through the gallery, and past its ends, or with none, on through the page's images
+  // (pageStep). The image shown stays until the next one's size is known.
   function go(step) {
-    if (!gallery || !shown) return;
-    const from = gallery.index;
+    if (!shown) return;
+    const from = gallery ? gallery.index : -1;
     const to = from + step;
-    if (to < 0 || to >= gallery.items.length) {
-      bump(step);
+    if (!gallery || to < 0 || to >= gallery.items.length) {
+      pageStep(step);
       return;
     }
     const target = hovered;
@@ -1193,7 +1411,7 @@
     spinnerTimer = setTimeout(showSpinner, SPINNER_AFTER, false);
     fetchMedia(item, (media) => {
       if (target !== hovered || !gallery || gallery.index !== to) return;
-      const box = media && placePopup(sizeOf(media), pointer, viewport(), null, hintRoom());
+      const box = media && boxFor(media, item, false);
       if (box) {
         showMedia(item, media, box, step);
         preloadAround();
@@ -1260,6 +1478,7 @@
     actualSize = { left: box.left, top: box.top, width: box.width, height: box.height };
     thumbImg.style.display = 'none';
     hint.style.display = 'none';
+    tallBar.style.display = 'none';
     const view = viewport();
     placeHost({ left: 0, top: 0, width: view.width, height: view.height });
     startAt('none');
@@ -1286,9 +1505,12 @@
     if (!shown || !full) return;
     finishSliding();
     if (!turns) {
-      const box = actualSize || hostBox;
+      // A tall image turns as the popup would show it whole, and stays whole after.
+      const box = (tall && tall.whole) || actualSize || hostBox;
       uprightBox = { left: box.left, top: box.top, width: box.width, height: box.height };
     }
+    tall = null;
+    tallBar.style.display = 'none';
     turns = (turns + 1) % 4;
     const box = turnInPlace(uprightBox, turns, viewport(), hintRoom());
     // The thumbnail standing in for the full image doesn't turn with it.
@@ -1344,7 +1566,8 @@
 
   // The image or video shown, filling the popup placed at `box`.
   function fitToPopup(box) {
-    if (turns || flipped) fitTurned({ left: 0, top: 0, width: box.width, height: box.height });
+    if (tall) panTall();
+    else if (turns || flipped) fitTurned({ left: 0, top: 0, width: box.width, height: box.height });
     else setStyles(full, FILL);
   }
 
@@ -1427,9 +1650,49 @@
     }
     // Saved under the name it was given, so it can be found in the downloads.
     const result = answer && answer.result;
-    if (result === 'saved') savedNames.set(url, answer.name || '');
+    if (result === 'saved') {
+      savedNames.set(url, answer.name || '');
+      flyToDownloads();
+    }
     if (result === 'saved') note(answer.name ? 'Saved ' + shortened(answer.name, 40) : 'Saved');
     else note(result === 'canceled' ? 'Not saved' : "Couldn't save");
+  }
+
+  // Once saved, a small copy of what the popup shows flies off to the window's top right corner, towards Firefox's
+  // downloads button, along a curve: drawn into a canvas, which a video's frame can be too.
+  function flyToDownloads() {
+    if (!MOTION || !shown || !full || !hostBox || actualSize) return;
+    const { left, top, width, height } = hostBox;
+    const scale = Math.min(1, 320 / Math.max(width, height));
+    const canvas = make('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    try {
+      // A tall image shown wide: the part in view.
+      if (tall) {
+        const from = (-parseFloat(full.style.top) || 0) * (tall.natural.width / width);
+        const part = height * (tall.natural.width / width);
+        canvas.getContext('2d').drawImage(full, 0, from, tall.natural.width, part, 0, 0, canvas.width, canvas.height);
+      } else {
+        canvas.getContext('2d').drawImage(full, 0, 0, canvas.width, canvas.height);
+      }
+    } catch (err) {
+      return;
+    }
+    setStyles(canvas, { ...FILL, 'z-index': '3', 'border-radius': '4px', 'pointer-events': 'none', 'transform-origin': '50% 50%' });
+    host.shadowRoot.append(canvas);
+    const x = viewport().width - 28 - (left + width / 2);
+    const y = -12 - (top + height / 2);
+    const end = 24 / Math.max(width, height);
+    const flight = canvas.animate(
+      [
+        { transform: 'none', opacity: 1 },
+        { transform: `translate(${(x * 0.6).toFixed(1)}px, ${(y * 0.2).toFixed(1)}px) scale(${Math.max(end, 0.45).toFixed(3)})`, opacity: 0.95, offset: 0.45 },
+        { transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${end.toFixed(4)})`, opacity: 0.3 },
+      ],
+      { duration: 650, easing: 'cubic-bezier(0.45, 0, 0.55, 1)' }
+    );
+    flight.onfinish = flight.oncancel = () => canvas.remove();
   }
 
   // O: the full-size image or video in a new tab, next to this one, which the background script opens.
@@ -1656,13 +1919,23 @@
     if (dismissed && el !== dismissed) dismissed = null;
     if (el && el === dismissed) return;
     if (hovered && found && hovered.el === el && hovered.urls[0] === found.urls[0]) return;
+    // Moving on from a popup, the next image like it opens at once for a moment, once the pointer is still on it,
+    // so a row of thumbnails can be looked through without waiting at each. Scrolling or closing it ends that.
+    if (shown && hovered && !steering) warm = { until: performance.now() + WARM_FOR, size: hovered.shownSize };
     if (hovered || shown) hide();
     if (!found) return;
     hovered = found;
-    timer = setTimeout(open, delay);
+    warmTimer = !!warm && performance.now() < warm.until && (!warm.size || !found.shownSize || similarSize(warm.size, found.shownSize));
+    timer = setTimeout(open, warmTimer ? WARM_DELAY : delay);
+    // The image starts loading halfway through the wait, so it's often there by the time the popup opens.
+    if (!warmTimer) loadTimer = setTimeout(load, delay / 2);
   }
 
   function onMove(event) {
+    // After ← → have moved on through the page's images, the pointer is over something else, which waits until
+    // the mouse moves: a page scrolling under a still pointer may send moves that go nowhere.
+    if (steering && event.clientX === pointer.x && event.clientY === pointer.y) return;
+    steering = false;
     pointer = { x: event.clientX, y: event.clientY };
     // At actual size, the mouse looks around the image instead.
     if (actualSize) {
@@ -1674,6 +1947,12 @@
       if (hovered) dismiss();
       return;
     }
+    // A warm hover's short wait starts again while the pointer moves, so an image only passed over doesn't open.
+    if (warmTimer && timer && !shown) {
+      clearTimeout(timer);
+      timer = setTimeout(open, WARM_DELAY);
+    }
+    if (tall && shown) panTall();
     if (enabled && !frame) frame = requestAnimationFrame(update);
   }
 
@@ -1685,17 +1964,21 @@
   window.addEventListener(
     'scroll',
     (event) => {
-      if (!hovered && !shown) return;
+      // The page scrolling is reading, not looking through images: the next one waits as usual.
+      if (event.target === document) warm = null;
+      // ← → scroll the page to the image they move on to, and the site may move it again as it adds more.
+      if ((!hovered && !shown) || steering) return;
       const box = event.target;
       if (box === document || !hovered || (box.nodeType === Node.ELEMENT_NODE && containsAcross(box, hovered.el))) hide();
     },
     passive
   );
+  window.addEventListener('wheel', () => (steering = false), passive);
   window.addEventListener('blur', () => (hovered || shown) && hide());
   document.addEventListener('visibilitychange', () => document.hidden && hide());
   // Leaving the window (or entering a frame in it).
   document.addEventListener('mouseout', (event) => !event.relatedTarget && (hovered || shown) && hide(), passive);
-  // Escape closes the popup, ← → move through a gallery, S saves, O opens in a new tab, C copies the image and
+  // Escape closes the popup, ← → move through a gallery and on through the page's images, S saves, O opens in a new tab, C copies the image and
   // Shift+C the address, Z shows the actual size, R turns the image, F flips it, I shows details, ? lists the keys,
   // and for a video M turns the sound on or off, Space pauses and ← → go back or on, without the keys also reaching
   // the page, which might close a dialog, move a carousel, scroll or have shortcuts of its own. The key pressed
@@ -1712,9 +1995,9 @@
       if (!shown || event.altKey || event.ctrlKey || event.metaKey || isTyping()) return;
       const video = isVideo(full) ? full : null;
       const arrow = { ArrowRight: 1, ArrowLeft: -1 }[event.key] || 0;
-      // ← → move through a gallery, and in a video on its own, back or on.
-      const step = gallery ? arrow : 0;
-      const seek = video && !gallery ? arrow * SEEK_STEP : 0;
+      // ← → move through a gallery and the page's images, and in a video on its own, back or on.
+      const step = arrow && arrowsMove() ? arrow : 0;
+      const seek = arrow && !step ? arrow * SEEK_STEP : 0;
       const actions = { s: save, o: openInTab, z: toggleActualSize, r: turn, f: flip, i: toggleInfo, '?': toggleKeys };
       // A video can't go on the clipboard, so C is left to the page there.
       if (event.shiftKey) actions.c = copyAddress;
@@ -1722,7 +2005,10 @@
       if (video) Object.assign(actions, { m: () => toggleSound(video), ' ': () => togglePause(video) });
       const key = event.key.toLowerCase();
       const action = actions[key];
-      if (!step && !seek && !action) return;
+      if (!step && !seek && !action) {
+        steering = false;
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       flashKey(arrow ? '← →' : key === ' ' ? 'Space' : event.shiftKey && key === 'c' ? 'Shift C' : event.key.toUpperCase());

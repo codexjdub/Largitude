@@ -481,6 +481,36 @@ function seekTime(time, step, length) {
   return length > 0 && length < Infinity ? Math.min(to, Math.max(0, length - 0.25)) : to;
 }
 
+// Whether two images are shown at sizes alike enough to be the same kind of image, such as two photos in a feed
+// rather than a photo and a profile picture: neither width nor height more than `ratio` times the other's.
+function similarSize(a, b, ratio = 2) {
+  const sized = (size) => !!size && size.width > 0 && size.height > 0;
+  if (!sized(a) || !sized(b)) return false;
+  const near = (x, y) => Math.max(x, y) <= Math.min(x, y) * ratio;
+  return near(a.width, b.width) && near(a.height, b.height);
+}
+
+// A tall image, such as a long screenshot or a comic, fitted whole into the window comes out too narrow to read.
+// Placed instead as if it were as wide as it is and half as tall again, it opens wide enough, and the rest is
+// seen by moving down (panOffset). Null for an image that shows well enough whole: not twice as tall as it is
+// wide, or shown at half its width or more anyway in `whole`, the popup placed for the whole image.
+function readableSize(natural, whole) {
+  if (!natural || !(natural.width >= 1) || natural.height < natural.width * 2) return null;
+  if (whole && whole.width >= natural.width * 0.5) return null;
+  return { width: natural.width, height: Math.round(natural.width * 1.5) };
+}
+
+// How far up to move a tall image shown `width` wide in a popup `boxHeight` tall, in px (0 or less), for the
+// pointer at `y` over the thumbnail `rect`: the image's top shows with the pointer in the thumbnail's top tenth,
+// its bottom in the bottom tenth, and in between the part as far down as the pointer is.
+function panOffset(natural, width, boxHeight, y, rect) {
+  const room = Math.max(0, (natural.height * width) / natural.width - boxHeight);
+  if (!room || !rect || !(rect.height > 0)) return 0;
+  const edge = rect.height * 0.1;
+  const share = Math.min(1, Math.max(0, (y - rect.top - edge) / (rect.height - 2 * edge)));
+  return -Math.round(room * share) || 0;
+}
+
 // Whether `bytes`, the first bytes of a file, are a PNG's: the eight that every PNG starts with.
 function isPngData(bytes) {
   return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => bytes[i] === byte);

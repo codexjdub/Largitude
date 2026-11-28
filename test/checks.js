@@ -2,6 +2,7 @@
 // receives like real ones, and lists what the popup showed. The results also go to window.largitudeChecks.
 (() => {
   const DELAY = 300; // Largitude's hover delay, with "Wait before showing" at Normal
+  const WARM_FOR = 1000; // how long after a popup closes the next image opens at once
   const WHEEL_SETTLE = 150; // its pause that ends a wheel gesture
   // The wheel turned for the next image: the way that scrolls the page down.
   const NEXT = 120;
@@ -45,6 +46,20 @@
     if (host) take(host.getAttribute('style'));
     return seen;
   }
+  // The style attribute of the popup's box, as it was before each change while `act` runs, and as it is after.
+  async function stylesDuring(act) {
+    const host = document.querySelector('largitude-popup');
+    const seen = [];
+    const observer = host && new MutationObserver((records) => records.forEach((record) => seen.push(record.oldValue || '')));
+    if (host) observer.observe(host, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+    await act();
+    await wait(50);
+    if (observer) observer.disconnect();
+    if (host) seen.push(host.getAttribute('style') || '');
+    return seen;
+  }
+  // A frame passing: Largitude looks under the pointer once a frame, before this.
+  const frame = (doc = document) => new Promise((resolve) => doc.defaultView.requestAnimationFrame(() => resolve()));
   const results = document.getElementById('results');
   const lines = [];
 
@@ -218,11 +233,15 @@
       pressReaches('s');
       return until(() => pattern.test(popupIn(document).note || ''), 1000);
     };
+    animated.length = 0;
     const reached = pressReaches('s');
     // Run again, the page remembers it saved it the first time.
     if (await until(() => /^Already saved/.test(popupIn(document).note || ''), 300)) pressReaches('s');
     const noted = await until(() => /^Saved full-1600x1200\.svg$/.test(popupIn(document).note || ''), 1000);
     report(!reached && noted, 'S saves, without reaching the page, and the popup says so with the name it was saved under', reached ? 'the page got the key' : `note "${popupIn(document).note}"`);
+    const flew = animated.some(({ el, keyframes }) => el.localName === 'canvas' && /translate\(/.test(keyframes));
+    report(still || flew, "once saved, a small copy flies off to the top right, towards Firefox's downloads button", animated.map(({ el }) => el.localName).join(', ') || 'nothing animated');
+    settled(document);
     await wait(100);
     const again = await noteFor(/^Already saved as full-1600x1200\.svg · S again for a copy$/);
     const note = popupIn(document).note;
@@ -505,6 +524,8 @@
     const el = document.querySelector('.case .target');
     const isOpen = () => popupIn(document).open;
     await away(document);
+    // Just after a popup, the next opens at once.
+    await wait(WARM_FOR + 100);
     let point = await hover(document, el);
     await wait(DELAY / 2);
     report(!isOpen(), 'waits for the pointer to rest before opening', WAIT);
@@ -627,21 +648,136 @@
     await until(() => popupIn(document).counter === '2 / 3', 3000);
     const showing = (counter) => until(() => popupIn(document).counter === counter && popupIn(document).src === `gallery-${counter[0]}.svg`, 2000);
     animated.length = 0;
-    pressReaches('ArrowRight');
-    await showing('3 / 3');
+    const styles = await stylesDuring(async () => {
+      pressReaches('ArrowRight');
+      await showing('3 / 3');
+    });
     const lit = animated.some(({ el }) => el.localName === 'b' && el.textContent === '← →');
     report(lit, 'the key pressed lights up in the line of keys', animated.map(({ el }) => el.localName).join(', ') || 'nothing animated');
     const full = popupIn(document).full;
     const slid = animated.some(({ el, keyframes }) => el === full && /translateX\(30%\)/.test(keyframes));
     const out = animated.some(({ el, keyframes }) => el !== full && /translateX\(-30%\)/.test(keyframes));
     report(still || (slid && out), "a gallery's next image slides in from the right as the one shown slides out to the left", animated.map(({ el, keyframes }) => `${el.localName} ${keyframes.slice(0, 60)}`).join('; '));
+    // Photo 2 is upright and photo 3 wide: the popup changes shape, the one going out kept centered as it does.
+    const reshaped = styles.some((style) => /transition:[^;]*width \d+ms/.test(style));
+    const centered = animated.some(({ el, keyframes }) => el !== full && /translateX\(-30%\)/.test(keyframes) && /^calc\(50%/.test(el.style.left));
+    report(still || (reshaped && centered), "between an upright and a wide image, the popup changes shape rather than snap", `width moving ${reshaped}, the last image centered ${centered}`);
+    settled(document);
+    // Past the post's last photo, → goes on to the page's next one, here a quoted post's, and ← comes back.
+    pressReaches('ArrowRight');
+    const quoted = await until(() => popupIn(document).src === 'full-1600x1200.svg' && !popupIn(document).counter, 3000);
+    const after = popupIn(document).src || 'nothing';
+    settled(document);
+    pressReaches('ArrowLeft');
+    const back = await showing('3 / 3');
+    report(quoted && back, "past a post's last photo, → goes on to the page's next photo and ← comes back", `then ${after}, then ${popupIn(document).src} ${popupIn(document).counter}`);
+    // Past the page's last one, the page scrolls on for more, and with none coming, the image nudges and springs
+    // back. The popup stays open while the page scrolls.
+    settled(document);
+    pressReaches('ArrowRight');
+    await until(() => popupIn(document).src === 'full-1600x1200.svg', 3000);
     settled(document);
     animated.length = 0;
     pressReaches('ArrowRight');
-    await wait(50);
     const stage = popupIn(document).stage;
-    const bumped = animated.some(({ el, keyframes }) => el === stage && /translateX\(-16px\)/.test(keyframes));
-    report(still || (bumped && popupIn(document).counter === '3 / 3'), 'past the last image, it nudges and springs back', `counter ${popupIn(document).counter}, ${animated.map(({ el }) => el.localName).join(', ') || 'nothing animated'}`);
+    const bumped = await until(() => animated.some(({ el, keyframes }) => el === stage && /translateX\(-16px\)/.test(keyframes)), 4000);
+    report(still || (bumped && popupIn(document).open), 'past the last image, it nudges and springs back', `open ${popupIn(document).open}, ${animated.map(({ el }) => el.localName).join(', ') || 'nothing animated'}`);
+    await away(document);
+  }
+
+  // Just after a popup closes as the pointer moves on, the next thumbnail like it opens without the usual wait;
+  // once the page scrolls, the next one waits again.
+  async function checkWarm() {
+    const [first, second, third] = document.querySelectorAll('.case .target');
+    const isOpen = () => popupIn(document).open;
+    const middle = (el) => {
+      const rect = el.getBoundingClientRect();
+      return [Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height / 2)];
+    };
+    await away(document);
+    await wait(WARM_FOR + 100);
+    await hover(document, first);
+    await until(isOpen, 3000);
+    moveTo(document, ...middle(second));
+    await frame();
+    const quick = await until(isOpen, DELAY - 80);
+    report(!!quick, 'just after a popup, the next thumbnail opens without the usual wait', WAIT);
+    scrollBy(0, 1);
+    await until(() => !isOpen(), 1000);
+    moveTo(document, ...middle(third));
+    await frame();
+    await wait(DELAY / 2);
+    const waited = !isOpen();
+    report(waited && !!(await until(isOpen, 3000)), 'once the page scrolls, the next one waits as usual', WAIT);
+    scrollBy(0, -1);
+    await away(document);
+  }
+
+  // The full image starts loading while the pointer rests, before the popup opens. Its address is new, so it isn't
+  // in the cache.
+  async function checkLoadAhead() {
+    const box = document.createElement('div');
+    const address = new URL(`images/full-1600x1200.svg?ahead=${Date.now()}`, location.href).href;
+    box.innerHTML = `<a href="${address}"><img src="images/thumb-200x150.svg" width="200" height="150" alt=""></a>`;
+    document.body.append(box);
+    await away(document);
+    await wait(WARM_FOR + 100);
+    await hover(document, box.querySelector('img'));
+    const opened = await until(() => popupIn(document).open, 3000);
+    const at = performance.now();
+    const entry = performance.getEntriesByName(address)[0];
+    const ahead = entry ? Math.round(at - entry.startTime) : 0;
+    report(!!opened && ahead > DELAY / 4, 'the full image starts loading while the pointer rests, before the popup opens', entry ? `${ahead} ms before it opened` : 'it never loaded');
+    await away(document);
+    box.remove();
+  }
+
+  // A tall image opens wide enough to read, from its top; moving down the strip moves down the image, with a bar
+  // at the right showing where.
+  async function checkTall() {
+    const card = [...document.querySelectorAll('.case')].find((c) => /^Tall image$/.test(c.querySelector('h2').textContent));
+    const el = card.querySelector('.target');
+    await away(document);
+    el.scrollIntoView({ block: 'center' });
+    await wait(100);
+    const rect = el.getBoundingClientRect();
+    const at = (share) => moveTo(document, Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height * share));
+    at(0.05);
+    const opened = await until(() => popupIn(document).src === 'tall-600x3000.svg', 3000);
+    settled(document);
+    const popup = popupIn(document);
+    const top = () => parseFloat(popupIn(document).full.style.top) || 0;
+    const height = opened ? parseFloat(popup.full.style.height) : 0;
+    // Whole, it would be a fifth as wide as tall.
+    const wide = !!opened && popup.box.width >= popup.box.height * 0.5 && height > popup.box.height * 2;
+    report(wide && top() === 0, 'a tall image opens wide enough to read, from its top', opened ? `box ${JSON.stringify(popup.box)}, image ${height} tall, at ${top()}` : 'it didn\'t open');
+    if (!opened) return;
+    at(0.95);
+    const bottom = top();
+    at(0.5);
+    const middle = top();
+    const end = -(height - popup.box.height);
+    const bar = [...popup.stage.children].some((child) => child.style.right === '3px' && child.style.display !== 'none');
+    report(Math.abs(bottom - end) <= 1 && middle < 0 && middle > end && bar, 'moving down the strip moves down the image, with a bar showing where', `at the bottom ${bottom} (the end ${end}), halfway ${middle}, bar ${bar}`);
+    await away(document);
+  }
+
+  // ← → on an image in no gallery go on to the page's next image like it, scrolled into view, and back. After the
+  // cropped thumbnail, that's the tall strip, shown from its top.
+  async function checkPageSteps() {
+    const card = [...document.querySelectorAll('.case')].find((c) => /^Cropped thumbnail$/.test(c.querySelector('h2').textContent));
+    await away(document);
+    await hover(document, card.querySelector('.target'));
+    await until(() => popupIn(document).src === 'wide-2400x800.svg', 3000);
+    const hint = popupIn(document).hint;
+    const reachedNext = pressReaches('ArrowRight');
+    const moved = await until(() => popupIn(document).src === 'tall-600x3000.svg', 3000);
+    const next = popupIn(document);
+    const fromTop = !!next.full && (parseFloat(next.full.style.top) || 0) === 0;
+    settled(document);
+    const reachedBack = pressReaches('ArrowLeft');
+    const back = await until(() => popupIn(document).src === 'wide-2400x800.svg', 3000);
+    report(/← → next/.test(hint) && !reachedNext && !reachedBack && moved && fromTop && !next.counter && back, "← → on an image go on to the page's next image like it, and back", `keys "${hint}", then ${next.src || 'nothing'} (from the top ${fromTop}), then ${popupIn(document).src}`);
     await away(document);
   }
 
@@ -784,6 +920,10 @@
     await checkLateError();
     await checkLook();
     await checkSizeAndInfo();
+    await checkWarm();
+    await checkLoadAhead();
+    await checkTall();
+    await checkPageSteps();
     if (standalone) await checkMotion();
     await checkVideoState();
     await checkDots();

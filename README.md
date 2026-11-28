@@ -8,11 +8,16 @@ A Firefox extension that shows images and videos full size when you rest the mou
 
 Rest the mouse on a thumbnail, a picture in a post, or a link to an image or video file. After a moment, the full-size version grows out of the thumbnail to open beside the pointer, fitted to the window, with a checkerboard showing through any transparent parts. The thumbnail shows, softened, until the full-size image has loaded, and for a moment a corner says how big the image is and how much bigger than the thumbnail. Move away and it shrinks back into the thumbnail.
 
+It starts loading the full-size image while you're still resting on the thumbnail, so it's often ready the moment the popup opens. Once one popup has opened, moving straight on to another image of about the same size opens that one almost at once, so you can run the mouse along a row of thumbnails.
+
+A long, narrow image, such as a comic strip or a long screenshot, opens wide enough to read instead of shrunk to the window's height. Moving the mouse down the thumbnail moves down the image, and a bar at the side shows where you are.
+
 While it's open:
 
 | Key | What it does |
 | --- | --- |
-| ← → or the mouse wheel | Move through a gallery |
+| ← → | Go to the next or previous image: through a gallery, and past its ends on to the page's next one |
+| The mouse wheel | Move through a gallery |
 | S | Save the image or video; for one you've already saved, it says so, and S again saves a copy |
 | O | Open it in a new tab |
 | C | Copy the image (on https pages, where Firefox allows it) |
@@ -22,16 +27,18 @@ While it's open:
 | F | Flip the image or video left to right |
 | M | Turn a video's sound on or off |
 | Space | Pause or play a video |
-| ← → | Go back or on 5 seconds in a video that isn't in a gallery |
+| ← → | Go back or on 5 seconds in a video, except in a gallery or among X's GIFs, where they go to the next image |
 | I | Show details over the popup: the file's name, size in pixels, type, size and site, and a video's length |
 | ? | Show every key over the popup, and hide them again |
 | Escape, or a click | Close it |
 
 A line under the popup shows a few of the keys for what it shows, such as M and Space for a video. Once you know them, you can turn it off in the settings, and the popup gets that room too.
 
-The mouse wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Past the last one, it scrolls the page again. The keys you press light up in the line under the popup, the next image slides in, and at either end of a gallery the popup gives a little bump.
+← → go on past a gallery's ends, or from an image that isn't in one, to the next or previous image on the page: the next one of about the same size, scrolled into view if it's out of sight. On X, they go through the photos and GIFs of the posts in turn, and past the last one they load more.
 
-If your system is set to reduce motion, the popup opens, closes, turns and moves through a gallery without moving.
+The mouse wheel moves through a gallery the way it scrolls the page: scrolling down shows the next image. Past the last one, it scrolls the page again. The keys you press light up in the line under the popup, the next image slides in while the popup takes its shape, and when there's no image further on, the popup gives a little bump. S sends a small copy of the image flying to the top right of the window, where Firefox's Downloads button is.
+
+If your system is set to reduce motion, the popup opens, closes, turns, changes shape and moves through a gallery without moving, and nothing flies when you save.
 
 ## What it shows
 
